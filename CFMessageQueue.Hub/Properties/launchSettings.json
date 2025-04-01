@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "CFMessageQueue.Hub": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
