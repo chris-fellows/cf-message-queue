@@ -10,6 +10,8 @@ Console.WriteLine("Starting CF Message Queue Test Client");
 var adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
 var defaultSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
+int localPort = 10010;
+
 // Set security key
 var securityKey = Guid.Empty.ToString();
 
@@ -18,7 +20,7 @@ var remoteEndpointInfo = new EndpointInfo()
     Ip = "192.168.1.45",
     Port = 10000
 };
-var messageHubClientConnector = new MessageHubClientConnector(remoteEndpointInfo, adminSecurityKey, defaultSecurityKey);
+var messageHubClientConnector = new MessageHubClientConnector(remoteEndpointInfo, adminSecurityKey, defaultSecurityKey, localPort);
 
 // Create client
 var newClientSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";

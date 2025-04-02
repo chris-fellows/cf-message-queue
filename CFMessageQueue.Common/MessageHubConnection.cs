@@ -45,7 +45,21 @@ namespace CFMessageQueue
                 }
             };
         }
-    
+
+        public void StartListening(int port)
+        {
+            //_log.Log(DateTimeOffset.UtcNow, "Information", $"Listening on port {port}");
+
+            _connection.ReceivePort = port;
+            _connection.StartListening();
+        }
+
+        public void StopListening()
+        {
+            //_log.Log(DateTimeOffset.UtcNow, "Information", "Stopping listening");
+            _connection.StopListening();
+        }
+
         private bool IsResponseMessage(ConnectionMessage connectionMessage)
         {
             var responseMessageTypeIds = new[]

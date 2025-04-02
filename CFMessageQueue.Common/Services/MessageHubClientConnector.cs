@@ -20,11 +20,13 @@ namespace CFMessageQueue.Services
         private readonly string _adminSecurityKey;
         private readonly string _defaultSecurityKey;
 
-        public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string adminSecurityKey, string defaultSecurityKey)
+        public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string adminSecurityKey, string defaultSecurityKey, int localPort)
         {
             _remoteEndpointInfo = remoteEndpointInfo;
             _adminSecurityKey = adminSecurityKey;
             _defaultSecurityKey = defaultSecurityKey;
+
+            _messageHubConnection.StartListening(localPort);
         }
 
         public Task ConfigureMessageHubClient(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
