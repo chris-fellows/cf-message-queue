@@ -21,12 +21,7 @@ namespace CFMessageQueue.Models
         /// <summary>
         /// Response (if any)
         /// </summary>
-        public MessageResponse? Response { get; set; }
-
-        /// <summary>
-        /// Agent who sent
-        /// </summary>
-        public string SenderAgentId { get; set; } = String.Empty;
+        public MessageResponse? Response { get; set; }        
 
         /// <summary>
         /// Security key

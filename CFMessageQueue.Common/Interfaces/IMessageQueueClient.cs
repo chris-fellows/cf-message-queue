@@ -18,10 +18,24 @@ namespace CFMessageQueue.Interfaces
         Task SendAsync(QueueMessage message, MessageQueue messageQueue);
 
         /// <summary>
-        /// Subscribes to messages sent to queue
+        /// Gets next message from queue
         /// </summary>
         /// <param name="messageQueue"></param>
         /// <returns></returns>
-        string Subscribe(MessageQueue messageQueue);
+        Task<QueueMessage?> GetNextAsync(MessageQueue messageQueue);
+
+        /// <summary>
+        /// Subscribe for notifications from queue. E.g. Message(s) added
+        /// </summary>
+        /// <param name="messageQueue"></param>
+        /// <returns></returns>
+        Task<string> SubscribeAsync(MessageQueue messageQueue);
+
+        /// <summary>
+        /// Unsubscribe from notifications from queue
+        /// </summary>
+        /// <param name="subscribeId"></param>
+        /// <returns></returns>
+        Task UnsubscribeAsync(string subscribeId);
     }
 }

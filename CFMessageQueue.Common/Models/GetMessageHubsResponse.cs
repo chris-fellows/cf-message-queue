@@ -1,18 +1,16 @@
 ﻿using CFMessageQueue.Constants;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using CFMessageQueue.Models;
 
 namespace CFMessageQueue.Models
 {
     public class GetMessageHubsResponse : MessageBase
     {
+        public List<QueueMessageHub> MessageHubs { get; set; } = new();
+
         public GetMessageHubsResponse()
         {
             Id = Guid.NewGuid().ToString();
-            TypeId = MessageTypeIds.GetMessageHubsResponse;
+            TypeId = MessageTypeIds.GetMessageHubsResponse;            
         }
     }
 }

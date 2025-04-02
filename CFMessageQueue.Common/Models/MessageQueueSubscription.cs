@@ -6,12 +6,10 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.Models
 {
-    public class QueueMessageHub
+    public class MessageQueueSubscription
     {
         public string Id { get; set; } = String.Empty;
 
-        public string IP { get; set; } = String.Empty;
-
-        public int Port { get; set; }
+        public string MessageQueueId { get; set; } = String.Empty;
     }
 }

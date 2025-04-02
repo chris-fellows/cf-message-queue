@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CFMessageQueue.Enums;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,8 +10,8 @@ namespace CFMessageQueue.Models
     public class MessageResponse
     {
         /// <summary>
-     /// If response then Id of original message
-     /// </summary>
+        /// If response then Id of original message
+        /// </summary>
         public string MessageId { get; set; } = String.Empty;
 
         /// <summary>

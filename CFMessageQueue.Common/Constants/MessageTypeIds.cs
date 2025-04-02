@@ -8,8 +8,14 @@ namespace CFMessageQueue.Constants
 {
     public static class MessageTypeIds
     {
-        public const string AddQueueMessage = "AddQueueMessage";
+        public const string AddQueueMessageRequest = "AddQueueMessageRequest";
+        public const string AddQueueMessageResponse = "AddQueueMessageResponse";
         public const string GetMessageHubsRequest = "GetMessageHubsRequest";
         public const string GetMessageHubsResponse = "GetMessageHubsResponse";
+        public const string GetNextQueueMessageRequest = "GetNextQueueMessageRequest";
+        public const string GetNextQueueMessageResponse = "GetNextQueueMessageResponse";
+
+        public const string MessageQueueSubscribeRequest = "MessageQueueSubscribeRequest";
+        public const string MessageQueueSubscribeResponse = "MessageQueueSubscribeResponse";
     }
 }

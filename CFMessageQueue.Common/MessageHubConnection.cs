@@ -16,7 +16,9 @@ namespace CFMessageQueue
     /// </summary>
     public class MessageHubConnection
     {
-        private ConnectionTcp _connectionTcp = new ConnectionTcp();
+        private ConnectionTcp _connection = new ConnectionTcp();
+
+        private MessageConverterList _messageConverterList = new();
 
         public delegate void ConnectionMessageReceived(ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo);
         public event ConnectionMessageReceived? OnConnectionMessageReceived;
@@ -27,7 +29,7 @@ namespace CFMessageQueue
 
         public MessageHubConnection()
         {
-            _connectionTcp.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+            _connection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
             {
                 if (IsResponseMessage(connectionMessage))     // Inside Send... method waiting for response
                 {
@@ -64,14 +66,30 @@ namespace CFMessageQueue
         /// </summary>
         /// <param name="addQueueMessageMessage"></param>
         /// <param name="remoteEndpointInfo"></param>
-        public void SendAddQueueMessageMessage(AddQueueMessageMessage addQueueMessageMessage, EndpointInfo remoteEndpointInfo)
+        public AddQueueMessageResponse SendAddQueueMessageMessage(AddQueueMessageRequest addQueueMessageMessage, EndpointInfo remoteEndpointInfo)
         {
-            _connectionTcp.SendMessage(null, remoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.AddQueueMessageRequestConverter.GetConnectionMessage(addQueueMessageMessage), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(addQueueMessageMessage, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+
+            if (isGotAllMessages)
+            {
+                return (AddQueueMessageResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to add message to queue");
         }
 
         public GetMessageHubsResponse SendGetMessageHubsRequest(GetMessageHubsRequest getMessageHubsRequest, EndpointInfo remoteEndpointInfo)
         {
-            _connectionTcp.SendMessage(null, remoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetMessageHubsRequestConverter.GetConnectionMessage(getMessageHubsRequest), remoteEndpointInfo);
 
             // Wait for response
             var responseMessages = new List<MessageBase>();
@@ -81,13 +99,52 @@ namespace CFMessageQueue
                       responseMessages.Add(responseMessage);
                   });
 
-
             if (isGotAllMessages)
             {
                 return (GetMessageHubsResponse)responseMessages.First();
             }
 
-            throw new MessageConnectionException("No response to get monitor agents");
+            throw new MessageConnectionException("No response to get message hubs");
+        }
+
+        public GetNextQueueMessageResponse SendGetNextQueueMessageRequest(GetNextQueueMessageRequest getNextQueueMessageRequest, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.GetNextQueueMessageRequestConverter.GetConnectionMessage(getNextQueueMessageRequest), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(getNextQueueMessageRequest, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+            if (isGotAllMessages)
+            {
+                return (GetNextQueueMessageResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to get next queue message");
+        }
+
+        public MessageQueueSubscribeResponse SendMessageQueueSubscribeRequest(MessageQueueSubscribeRequest messageQueueSubscribeRequest, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.MessageQueueSubscribeRequestConverter.GetConnectionMessage(messageQueueSubscribeRequest), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(messageQueueSubscribeRequest, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+            if (isGotAllMessages)
+            {
+                return (MessageQueueSubscribeResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to get next queue message");
         }
 
         /// <summary>
