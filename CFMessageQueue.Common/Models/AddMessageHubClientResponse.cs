@@ -7,14 +7,14 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.Models
 {
-    public class GetNextQueueMessageRequest : MessageBase
+    public class AddMessageHubClientResponse : MessageBase
     {
-        public string MessageQueueId { get; set; } = String.Empty;
+        public string MessageHubClientId { get; set; } = String.Empty;
 
-        public GetNextQueueMessageRequest()
+        public AddMessageHubClientResponse()
         {
             Id = Guid.NewGuid().ToString();
-            TypeId = MessageTypeIds.GetNextQueueMessageRequest;
+            TypeId = MessageTypeIds.AddMessageHubClientResponse;
         }
     }
 }

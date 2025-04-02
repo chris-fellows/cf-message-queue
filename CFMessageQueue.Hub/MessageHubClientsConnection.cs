@@ -1,5 +1,5 @@
-﻿using CFConnectionMessaging;
-using CFConnectionMessaging.Models;
+﻿using CFConnectionMessaging.Models;
+using CFConnectionMessaging;
 using CFMessageQueue.Constants;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Logs;
@@ -7,19 +7,16 @@ using CFMessageQueue.Models;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Linq;
-using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace CFMessageQueue.Hub
 {
     /// <summary>
-    /// Connection for clients for single message queue. Clients connection via specific port (TCP)
+    /// Connection for clients for hub. Handles communications not relevant to specific queues. E.g. Get queue list.
     /// </summary>
-    public class MessageQueueClientsConnection
+    public class MessageHubClientsConnection
     {
         private readonly ConnectionTcp _connection = new ConnectionTcp();
 
@@ -28,11 +25,11 @@ namespace CFMessageQueue.Hub
         private readonly IServiceProvider _serviceProvider;
 
         private readonly ISimpleLog _log;
-
+        
         public delegate void ConnectionMessageReceived(ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo);
         public event ConnectionMessageReceived? OnConnectionMessageReceived;
 
-        public MessageQueueClientsConnection(IServiceProvider serviceProvider)
+        public MessageHubClientsConnection(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
             _log = _serviceProvider.GetRequiredService<ISimpleLog>();
@@ -68,25 +65,35 @@ namespace CFMessageQueue.Hub
             _log.Log(DateTimeOffset.UtcNow, "Information", "Stopping listening");
             _connection.StopListening();
         }
-      
+
         private bool IsResponseMessage(ConnectionMessage connectionMessage)
         {
             return false;
         }
 
-        public void SendAddQueueMessageResponse(AddQueueMessageResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendGetMessageHubsResponse(GetMessageHubsResponse getMessageHubsResponse, MessageReceivedInfo messageReceivedInfo)
         {
-            _connection.SendMessage(_messageConverterList.AddQueueMessageResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetMessageHubsResponseConverter.GetConnectionMessage(getMessageHubsResponse), messageReceivedInfo.RemoteEndpointInfo);
         }
 
-        public void SendGetNextQueueMessageResponse(GetNextQueueMessageResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendGetMessageQueuesResponse(GetMessageQueuesResponse getMessageQueuesResponse, MessageReceivedInfo messageReceivedInfo)
         {
-            _connection.SendMessage(_messageConverterList.GetNextQueueMessageResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetMessageQueuesResponseConverter.GetConnectionMessage(getMessageQueuesResponse), messageReceivedInfo.RemoteEndpointInfo);
         }
 
-        public void SendMessageQueueSubscribeResponse(MessageQueueSubscribeResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendAddMessageHubClientResponse(AddMessageHubClientResponse addMessageHubClientResponse, MessageReceivedInfo messageReceivedInfo)
         {
-            _connection.SendMessage(_messageConverterList.MessageQueueSubscribeResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.AddMessageHubClientResponseConverter.GetConnectionMessage(addMessageHubClientResponse), messageReceivedInfo.RemoteEndpointInfo);
+        }
+
+        public void SendAddMessageQueueResponse(AddMessageQueueResponse addMessageQueueResponse, MessageReceivedInfo messageReceivedInfo)
+        {
+            _connection.SendMessage(_messageConverterList.AddMessageQueueResponseConverter.GetConnectionMessage(addMessageQueueResponse), messageReceivedInfo.RemoteEndpointInfo);
+        }
+
+        public void SendConfigureMessageHubClientResponse(ConfigureMessageHubClientResponse configureMessageHubClientResponse, MessageReceivedInfo messageReceivedInfo)
+        {
+            _connection.SendMessage(_messageConverterList.ConfigureMessageHubClientResponseConverter.GetConnectionMessage(configureMessageHubClientResponse), messageReceivedInfo.RemoteEndpointInfo);
         }
     }
 }

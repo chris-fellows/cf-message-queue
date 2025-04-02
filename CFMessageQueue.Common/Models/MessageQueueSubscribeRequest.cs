@@ -9,7 +9,7 @@ namespace CFMessageQueue.Models
 {
     public class MessageQueueSubscribeRequest : MessageBase
     {
-        public MessageQueue MessageQueue { get; set; }
+        public string MessageQueueId { get; set; } = String.Empty;
 
         public MessageQueueSubscribeRequest()
         {

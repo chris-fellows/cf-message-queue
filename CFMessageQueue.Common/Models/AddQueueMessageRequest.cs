@@ -6,7 +6,7 @@ namespace CFMessageQueue.Models
     {
         public QueueMessage QueueMessage { get; set; }
 
-        public MessageQueue MessageQueue { get; set; }
+        public string MessageQueueId { get; set; } = String.Empty;
 
         public AddQueueMessageRequest()
         {

@@ -10,22 +10,38 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.Services
 {
-    public class MessageQueueClient : IMessageQueueClient
+    public class MessageQueueClientService : IMessageQueueClientConnector
     {
-        private readonly MessageHubConnection _messageHubConnection;
+        private MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
-        public async Task SendAsync(QueueMessage queueMessage, MessageQueue messageQueue)
+        private MessageQueue? _messageQueue;
+
+        private readonly string _securityKey;
+
+        public MessageQueueClientService(string securityKey)
+        {
+            _securityKey = securityKey;
+        }
+
+        public void SetMessageQueue(MessageQueue messageQueue)
+        {
+            _messageQueue = messageQueue;
+            _messageHubConnection = new MessageHubConnection();            
+        }
+
+        public async Task SendAsync(QueueMessage queueMessage)
         {
             var addQueueMessageRequest = new AddQueueMessageRequest()
             {
+                SecurityKey = _securityKey,
                 QueueMessage = queueMessage,
-                MessageQueue = messageQueue
+                MessageQueueId = _messageQueue.Id
             };
 
             var remoteEndpointInfo = new EndpointInfo()
             {
-                Ip = messageQueue.IP,
-                Port = messageQueue.Port
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
             };
 
             try
@@ -39,17 +55,18 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public async Task<QueueMessage?> GetNextAsync(MessageQueue messageQueue)
+        public async Task<QueueMessage?> GetNextAsync()
         {
             var getNextQueueMessageRequest = new GetNextQueueMessageRequest()
             {
-                MessageQueue = messageQueue
+                SecurityKey = _securityKey,
+                MessageQueueId = _messageQueue.Id
             };
 
             var remoteEndpointInfo = new EndpointInfo()
             {
-                Ip = messageQueue.IP,
-                Port = messageQueue.Port
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
             };
 
             try
@@ -65,17 +82,18 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public async Task<string?> SubscribeAsync(MessageQueue messageQueue)
+        public async Task<string?> SubscribeAsync()
         {
             var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
             {
-                MessageQueue = messageQueue
+                SecurityKey = _securityKey,
+                MessageQueueId = _messageQueue.Id
             };
 
             var remoteEndpointInfo = new EndpointInfo()
             {
-                Ip = messageQueue.IP,
-                Port = messageQueue.Port
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
             };
 
             try

@@ -10,8 +10,4 @@
     <ProjectReference Include="..\..\cf-connection-messaging\CFConnectionMessaging.Common\CFConnectionMessaging.Common.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="MessageConverters\" />
-  </ItemGroup>
-
 </Project>

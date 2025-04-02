@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -27,5 +28,10 @@ namespace CFMessageQueue.Models
         /// Security key
         /// </summary>
         public string SecurityKey { get; set; } = String.Empty;
+
+        ///// <summary>
+        ///// Client that is sending message
+        ///// </summary>
+        //public string SenderMessageHubClientId { get; set; } = String.Empty;
     }
 }
