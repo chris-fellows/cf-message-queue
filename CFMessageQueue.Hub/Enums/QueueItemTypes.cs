@@ -10,6 +10,7 @@ namespace CFMessageQueue.Hub.Enums
     {
         ArchiveLogs,
         ConnectionMessage,
-        ExpireQueueMessages
+        ExpireQueueMessages,
+        QueueNotifications
     }
 }

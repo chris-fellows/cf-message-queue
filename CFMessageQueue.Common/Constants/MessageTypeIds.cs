@@ -32,6 +32,8 @@ namespace CFMessageQueue.Constants
         public const string GetNextQueueMessageRequest = "GetNextQueueMessageRequest";
         public const string GetNextQueueMessageResponse = "GetNextQueueMessageResponse";
 
+        public const string MessageQueueNotification = "MessageQueueNotification";
+
         public const string MessageQueueSubscribeRequest = "MessageQueueSubscribeRequest";
         public const string MessageQueueSubscribeResponse = "MessageQueueSubscribeResponse";
     }

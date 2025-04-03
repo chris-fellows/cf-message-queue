@@ -35,6 +35,16 @@ namespace CFMessageQueue.MessageConverters
                        Name = "MessageQueueId",
                        Value = externalMessage.MessageQueueId
                    },
+                     new ConnectionMessageParameter()
+                   {
+                       Name = "ActionName",
+                       Value = externalMessage.ActionName
+                   },
+                     new ConnectionMessageParameter()
+                   {
+                       Name = "QueueSizeFrequencySecs",
+                       Value = externalMessage.QueueSizeFrequencySecs.ToString()
+                   }
                 }
             };
             return connectionMessage;
@@ -46,7 +56,9 @@ namespace CFMessageQueue.MessageConverters
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
-                MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value
+                MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value,
+                ActionName = connectionMessage.Parameters.First(p => p.Name == "ActionName").Value,
+                QueueSizeFrequencySecs = Convert.ToInt64(connectionMessage.Parameters.First(p => p.Name == "ActionName").Value)
             };
 
             return externalMessage;

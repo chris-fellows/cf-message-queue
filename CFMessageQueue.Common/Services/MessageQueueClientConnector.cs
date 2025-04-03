@@ -1,10 +1,12 @@
 ﻿using CFConnectionMessaging.Models;
+using CFMessageQueue.Constants;
 using CFMessageQueue.Exceptions;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -19,6 +21,8 @@ namespace CFMessageQueue.Services
         private readonly string _securityKey;
 
         private int _localPort;
+
+        private Action<string>? _notificationAction;
 
         public MessageQueueClientConnector(string securityKey, int localPort)
         {
@@ -38,6 +42,18 @@ namespace CFMessageQueue.Services
 
             _messageQueue = messageQueue;
             _messageHubConnection = new MessageHubConnection();
+            _messageHubConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+            {
+                // If notification then forward
+                if (connectionMessage.TypeId == MessageTypeIds.MessageQueueNotification &&
+                    _notificationAction != null)
+                {
+                    var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationConverter.GetExternalMessage(connectionMessage);
+
+                    // Notify
+                    Task.Factory.StartNew(() => _notificationAction(notification.EventName));
+                }
+            };
           
             _messageHubConnection.StartListening(_localPort);
         }
@@ -142,12 +158,14 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public async Task<string?> SubscribeAsync()
+        public async Task<string?> SubscribeAsync(Action<string> notificationAction, TimeSpan queueSizeNotificationFrequency)
         {
             var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
             {
                 SecurityKey = _securityKey,
-                MessageQueueId = _messageQueue.Id
+                MessageQueueId = _messageQueue.Id,
+                ActionName = "SUBSCRIBE",
+                QueueSizeFrequencySecs = Convert.ToInt64(queueSizeNotificationFrequency.TotalSeconds)
             };
 
             var remoteEndpointInfo = new EndpointInfo()
@@ -161,6 +179,9 @@ namespace CFMessageQueue.Services
                 var response = _messageHubConnection.SendMessageQueueSubscribeRequest(messageQueueSubscribeRequest, remoteEndpointInfo);
                 ThrowResponseExceptionIfRequired(response);
 
+                // Set notification action
+                _notificationAction = notificationAction;
+
                 return response.SubscribeId;
             }
             catch (MessageConnectionException messageConnectionException)
@@ -169,9 +190,35 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public Task UnsubscribeAsync(string subscribeId)
+        public Task UnsubscribeAsync()
         {
-            throw new NotImplementedException();
+            var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
+            {
+                SecurityKey = _securityKey,
+                MessageQueueId = _messageQueue.Id,
+                ActionName = "UNSUBSCRIBE"
+            };
+
+            var remoteEndpointInfo = new EndpointInfo()
+            {
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendMessageQueueSubscribeRequest(messageQueueSubscribeRequest, remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);
+
+                // Clear subscribe action
+                _notificationAction = null;
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error subscribing to message queue", messageConnectionException);
+            }
+
+            return Task.CompletedTask;               
         }
 
         /// <summary>

@@ -27,15 +27,16 @@ namespace CFMessageQueue.Interfaces
         /// <summary>
         /// Subscribe for notifications from queue. E.g. Message(s) added
         /// </summary>
-        /// <param name="messageQueue"></param>
+        /// <param name="notificationAction">Action to take< (Parameter=Event name)</param>        
+        /// <param name="queueSizeNotificationFrequency">Frequency to notify of queue size (Zero=Never)</param>
         /// <returns></returns>
-        Task<string> SubscribeAsync();
+        Task<string> SubscribeAsync(Action<string> notificationAction, TimeSpan queueSizeNotificationFrequency);
 
         /// <summary>
         /// Unsubscribe from notifications from queue
         /// </summary>
         /// <param name="subscribeId"></param>
         /// <returns></returns>
-        Task UnsubscribeAsync(string subscribeId);
+        Task UnsubscribeAsync();
     }
 }

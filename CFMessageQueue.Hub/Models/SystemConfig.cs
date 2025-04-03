@@ -14,6 +14,10 @@ namespace CFMessageQueue.Hub.Models
 
         public int MaxQueuePort { get; set; }
 
+        public int MaxLogDays { get; set; }
+
+        public string LogFolder { get; set; } = String.Empty;
+
         /// <summary>
         /// Admin security key. This is needed to create the initial hub client
         /// </summary>

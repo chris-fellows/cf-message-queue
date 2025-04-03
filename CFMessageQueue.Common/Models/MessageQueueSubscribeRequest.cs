@@ -11,6 +11,10 @@ namespace CFMessageQueue.Models
     {
         public string MessageQueueId { get; set; } = String.Empty;
 
+        public string ActionName { get; set; } = String.Empty;
+
+        public long QueueSizeFrequencySecs { get; set; }
+
         public MessageQueueSubscribeRequest()
         {
             Id = Guid.NewGuid().ToString();

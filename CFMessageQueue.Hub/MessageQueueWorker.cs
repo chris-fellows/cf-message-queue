@@ -4,6 +4,7 @@ using CFMessageQueue.Enums;
 using CFMessageQueue.Hub.Enums;
 using CFMessageQueue.Hub.Models;
 using CFMessageQueue.Interfaces;
+using CFMessageQueue.Logs;
 using CFMessageQueue.Models;
 using CFMessageQueue.Utilities;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,15 +36,82 @@ namespace CFMessageQueue.Hub
         private TimeSpan _expireMessagesFrequency = TimeSpan.FromSeconds(60);
         private DateTimeOffset _lastExpireQueueMessages = DateTimeOffset.MinValue;
 
+        private readonly ISimpleLog _log;
+
+        private readonly Mutex _queueMutex = new Mutex();
+
+        /// <summary>
+        /// Message hub clients subscribed for this queue.
+        /// 
+        /// It will mainly be used for notifying the client that new messages are in the queue.
+        /// We don't really know how the client intends to interact with us.
+        /// 
+        /// We don't really want to generate lots of network traffic by notifying the client of every message
+        /// that is added.
+        /// 
+        /// How the client may interact with hub:
+        /// ------------------------------------
+        /// - Client calls GetNextAsync() and if it returns nothing then it waits for a 'Message added' notification
+        ///   and calls GetNextAsync() until it returns nothing.
+        ///   (This is the easiest scenario to handle).
+        /// 
+        /// - Client waits for a 'Message added' notification and then calls GetNextAsync(). We don't know if the client
+        ///   will call GetNextAsync() again.
+        /// 
+        /// Notifications:
+        /// - Message added.
+        /// - Queue cleared.
+        /// </summary>
+
+        /// <summary>
+        /// Client subscription info. Indicates which notifications are required
+        /// </summary>
+        private class ClientSubscriptionInfo
+        {
+            public string MessageHubClientId { get; set; } = String.Empty;
+
+            /// <summary>
+            /// Frequency to notify queue size (0=Never)
+            /// </summary>
+            public long QueueSizeFrequencySecs { get; set; }
+
+            public DateTimeOffset LastNotifyQueueSize { get; set; } = DateTimeOffset.UtcNow;
+
+            /// <summary>
+            /// Notify client of queue size
+            /// </summary>
+            public bool DoNotifyQueueSize { get; set; }
+
+            /// <summary>
+            /// Whether to notify client if a new message is added.
+            /// </summary>
+            public bool NotifyIfMessageAdded { get; set; }
+
+            /// <summary>
+            /// Notify client that message was added
+            /// </summary>
+            public bool DoNotifyMessageAdded { get; set; }
+
+            /// <summary>
+            /// Notifyt client that queue was cleared
+            /// </summary>
+            public bool DoNotifyQueueCleared { get; set; }
+
+            public bool IsNotificationRequired => DoNotifyQueueSize || DoNotifyMessageAdded || DoNotifyQueueCleared;
+        }
+
+        private readonly List<ClientSubscriptionInfo> _clientSubscriptionInfos = new();
+
         public MessageQueueWorker(MessageQueue messageQueue, IServiceProvider serviceProvider)
         {
             _messageQueue = messageQueue;
             _serviceProvider = serviceProvider;
+            _log = serviceProvider.GetRequiredService<ISimpleLog>();
 
             _messageQueueClientsConnection = new MessageQueueClientsConnection(serviceProvider);            
             _messageQueueClientsConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
             {
-                Console.WriteLine($"Received message {connectionMessage.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Received message {connectionMessage.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
 
                 var queueItem = new QueueItem()
                 {
@@ -56,17 +124,45 @@ namespace CFMessageQueue.Hub
                 _timer.Interval = 100;
             };
 
+            // Load subscribed clients
+            var messageQueueSubscriptionService = _serviceProvider.GetRequiredService<IMessageQueueSubscriptionService>();
+            var messageQueueSubscriptions = messageQueueSubscriptionService.GetAll()
+                                        .Where(s => s.MessageQueueId == _messageQueue.Id).ToList();
+
+            // 
+            _clientSubscriptionInfos.AddRange(messageQueueSubscriptions.Select(s =>
+            {
+                return new ClientSubscriptionInfo
+                {
+                    MessageHubClientId = s.MessageHubClientId,
+                    NotifyIfMessageAdded = true,     // Notify when first message added
+                    DoNotifyMessageAdded = false
+                };
+            }).ToList());
+
             _timer = new System.Timers.Timer();
             _timer.Elapsed += _timer_Elapsed;
             _timer.Interval = 5000;
             _timer.Enabled = false;
         }
 
+        public void NotifyQueueCleared()
+        {
+            _clientSubscriptionInfos.ForEach(c =>
+            {
+                c.DoNotifyQueueCleared = true;
+                c.DoNotifyMessageAdded = false; // Sanity check
+                c.NotifyIfMessageAdded = false; // Sanity check
+            });
+        }
+
         public string MessageQueueId => _messageQueue.Id;
 
+        public Mutex QueueMutex => _queueMutex;
+        
         public void Start()
         {
-            //_log.Log(DateTimeOffset.UtcNow, "Information", "Worker starting");
+            _log.Log(DateTimeOffset.UtcNow, "Information", "Worker starting");
 
             _timer.Enabled = true;
 
@@ -75,7 +171,7 @@ namespace CFMessageQueue.Hub
 
         public void Stop()
         {
-           // _log.Log(DateTimeOffset.UtcNow, "Information", "Worker stopping");
+            _log.Log(DateTimeOffset.UtcNow, "Information", "Worker stopping");
 
             _timer.Enabled = false;
 
@@ -89,9 +185,24 @@ namespace CFMessageQueue.Hub
                 _timer.Enabled = false;
 
                 // Check if need to expire messages
-                if (_lastExpireQueueMessages.Add(_expireMessagesFrequency) <= DateTimeOffset.UtcNow)
+                if (_lastExpireQueueMessages.Add(_expireMessagesFrequency) <= DateTimeOffset.UtcNow &&
+                    !_queueItems.Any(q => q.ItemType == QueueItemTypes.ExpireQueueMessages)) 
                 {
                     _queueItems.Append(new QueueItem() { ItemType = QueueItemTypes.ExpireQueueMessages });
+                }                
+
+                _clientSubscriptionInfos.Where(c => c.QueueSizeFrequencySecs > 0 &&
+                                    c.LastNotifyQueueSize.AddSeconds(c.QueueSizeFrequencySecs) <= DateTimeOffset.UtcNow).ToList()
+                                    .ForEach(s =>
+                                    {
+                                        s.DoNotifyQueueSize = true;
+                                    });
+
+                // Check if need to notify subscriptions
+                if (_clientSubscriptionInfos.Any(s => s.IsNotificationRequired) &&
+                    !_queueItems.Any(q => q.ItemType == QueueItemTypes.QueueNotifications))
+                {
+                    _queueItems.Append(new QueueItem() { ItemType = QueueItemTypes.QueueNotifications });
                 }
 
                 ProcessQueueItems(() =>
@@ -103,12 +214,13 @@ namespace CFMessageQueue.Hub
             }
             catch(Exception exception)
             {
-                Console.WriteLine($"Error executing regular functions: {exception.Message}");
+                _log.Log(DateTimeOffset.UtcNow, "Error", $"Error executing regular functions: {exception.Message}");
             }
             finally
             {
                 _timer.Interval = _queueItems.Any() ||
-                            _queueItemTasks.Any() ? 100 : 5000;
+                            _queueItemTasks.Any()  ||
+                            _clientSubscriptionInfos.Any(s => s.IsNotificationRequired) ? 100 : 5000;
                 _timer.Enabled = true;
             }
         }
@@ -156,6 +268,10 @@ namespace CFMessageQueue.Hub
             {
                 _queueItemTasks.Add(new QueueItemTask(ExpireQueueMessagesAsync(_messageQueue.Id), queueItem));
             }
+            else if (queueItem.ItemType == QueueItemTypes.QueueNotifications)
+            {
+                _queueItemTasks.Add(new QueueItemTask(NotifySubscriptionsAsync(), queueItem));
+            }
         }
 
         /// <summary>
@@ -168,50 +284,73 @@ namespace CFMessageQueue.Hub
         {
             return Task.Factory.StartNew(async () =>
             {
-                using (var scope = _serviceProvider.CreateScope())
+                var isHasMutex = false;
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {addQueueMessageRequest.TypeId}");
+
+                try
                 {
-                    var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
-                    var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-
-                    var response = new AddQueueMessageResponse()
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        Response = new MessageResponse()
+                        var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
+                        var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+
+                        var response = new AddQueueMessageResponse()
                         {
-                            IsMore = false,
-                            MessageId = addQueueMessageRequest.Id,
-                            Sequence = 1
-                        },
-                    };
+                            Response = new MessageResponse()
+                            {
+                                IsMore = false,
+                                MessageId = addQueueMessageRequest.Id,
+                                Sequence = 1
+                            },
+                        };
 
-                    var messageHubClient = GetMessageHubClientBySecurityKey(addQueueMessageRequest.SecurityKey, messageHubClientService);
+                        var messageHubClient = GetMessageHubClientBySecurityKey(addQueueMessageRequest.SecurityKey, messageHubClientService);
 
-                    var messageQueue = await messageQueueService.GetByIdAsync(addQueueMessageRequest.MessageQueueId);
+                        var messageQueue = await messageQueueService.GetByIdAsync(addQueueMessageRequest.MessageQueueId);
 
-                    if (messageHubClient == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
-                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        if (messageHubClient == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (messageQueue == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
+                        }
+                        else
+                        {
+                            isHasMutex = _queueMutex.WaitOne();
+
+                            // Set message queue
+                            addQueueMessageRequest.QueueMessage.MessageQueueId = _messageQueue.Id;
+
+                            // Set the sender
+                            addQueueMessageRequest.QueueMessage.SenderMessageHubClientId = messageHubClient.Id;
+
+                            await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);
+
+                            // If client subscription indicates waiting for new message then flag notification
+                            _clientSubscriptionInfos.Where(s => s.NotifyIfMessageAdded).ToList()
+                                    .ForEach(s =>
+                                    {
+                                        s.DoNotifyMessageAdded = true;
+                                        s.NotifyIfMessageAdded = false;
+                                    });                                   
+                        }
+
+                        // Send response
+                        _messageQueueClientsConnection.SendAddQueueMessageResponse(response, messageReceivedInfo);
                     }
-                    else if (messageQueue == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
-                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
-                    }
-                    else
-                    {
-                        // Set message queue
-                        addQueueMessageRequest.QueueMessage.MessageQueueId = _messageQueue.Id;
-
-                        // Set the sender
-                        addQueueMessageRequest.QueueMessage.SenderMessageHubClientId = messageHubClient.Id;
-
-                        await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);
-                    }
-
-                    // Send response
-                    _messageQueueClientsConnection.SendAddQueueMessageResponse(response, messageReceivedInfo);                    
                 }
+                finally
+                {
+                    if (isHasMutex) _queueMutex.ReleaseMutex();
+                }
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {addQueueMessageRequest.TypeId}");
             });
         }
 
@@ -225,50 +364,74 @@ namespace CFMessageQueue.Hub
         {
             return Task.Factory.StartNew(async () =>
             {
-                using (var scope = _serviceProvider.CreateScope())
-                {
-                    var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
-                    var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {getNextQueueMessageRequest.TypeId}");
 
-                    var response = new GetNextQueueMessageResponse()
+                var isHasMutex = false;
+                try
+                {                    
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        Response = new MessageResponse()
+                        var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
+                        var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+
+                        var response = new GetNextQueueMessageResponse()
                         {
-                            IsMore = false,
-                            MessageId = getNextQueueMessageRequest.Id,
-                            Sequence = 1
-                        },
-                    };
+                            Response = new MessageResponse()
+                            {
+                                IsMore = false,
+                                MessageId = getNextQueueMessageRequest.Id,
+                                Sequence = 1
+                            },
+                        };
 
-                    var messageHubClient = GetMessageHubClientBySecurityKey(getNextQueueMessageRequest.SecurityKey, messageHubClientService);
+                        var messageHubClient = GetMessageHubClientBySecurityKey(getNextQueueMessageRequest.SecurityKey, messageHubClientService);
 
-                    var messageQueue = await messageQueueService.GetByIdAsync(getNextQueueMessageRequest.MessageQueueId);
+                        var messageQueue = await messageQueueService.GetByIdAsync(getNextQueueMessageRequest.MessageQueueId);
 
-                    if (messageHubClient == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
-                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        if (messageHubClient == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (messageQueue == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
+                        }
+                        else
+                        {
+                            isHasMutex = _queueMutex.WaitOne();
+
+                            // TODO: Make this more efficient
+                            var queueMessage = (await queueMessageService.GetAllAsync())
+                                                .Where(m => m.MessageQueueId == messageQueue.Id)
+                                                .Where(m => m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow)  // not expired
+                                                .OrderBy(m => m.CreatedDateTime).FirstOrDefault();
+
+                            response.QueueMessage = queueMessage;
+
+                            // If there's no message then we should notify subscriptions when new message is added
+                            if (queueMessage == null)
+                            {
+                                _clientSubscriptionInfos.ForEach(s =>
+                                {
+                                    s.NotifyIfMessageAdded = true;
+                                    s.DoNotifyMessageAdded = false;
+                                });
+                            }
+                        }
+
+                        // Send response
+                        _messageQueueClientsConnection.SendGetNextQueueMessageResponse(response, messageReceivedInfo);
                     }
-                    else if (messageQueue == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
-                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
-                    }
-                    else
-                    {                        
-                        // TODO: Make this more efficient
-                        var queueMessage = (await queueMessageService.GetAllAsync())
-                                            .Where(m => m.MessageQueueId == messageQueue.Id)
-                                            .Where(m => m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow)  // not expired
-                                            .OrderBy(m => m.CreatedDateTime).FirstOrDefault();
-
-                        response.QueueMessage = queueMessage;
-                    }
-
-                    // Send response
-                    _messageQueueClientsConnection.SendGetNextQueueMessageResponse(response, messageReceivedInfo);
                 }
+                finally
+                {
+                    if (isHasMutex) _queueMutex.ReleaseMutex();
+                }
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getNextQueueMessageRequest.TypeId}");
             });
         }
 
@@ -282,20 +445,15 @@ namespace CFMessageQueue.Hub
         {
             return Task.Factory.StartNew(async () =>
             {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {messageQueueSubscribeRequest.TypeId}");
+
                 using (var scope = _serviceProvider.CreateScope())
                 {
-                    // TODO: Save subscription
                     var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                     var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
                     var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-
-                    // Save subscription
-                    var messageQueueSubscription = new MessageQueueSubscription()
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        MessageQueueId = messageQueueSubscribeRequest.MessageQueueId
-                    };
-
+                    var messageQueueSubscriptionService = scope.ServiceProvider.GetRequiredService<IMessageQueueSubscriptionService>();
+                  
                     // Create response
                     var response = new MessageQueueSubscribeResponse()
                     {
@@ -305,7 +463,7 @@ namespace CFMessageQueue.Hub
                             MessageId = messageQueueSubscribeRequest.Id,
                             Sequence = 1
                         },
-                        SubscribeId = messageQueueSubscription.Id
+                        SubscribeId = ""
                     };
 
                     var messageHubClient = GetMessageHubClientBySecurityKey(messageQueueSubscribeRequest.SecurityKey, messageHubClientService);
@@ -322,14 +480,72 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
                     }
+                    else if (messageQueueSubscribeRequest.QueueSizeFrequencySecs > 0 &&
+                            messageQueueSubscribeRequest.QueueSizeFrequencySecs < 30)       // Limit smallest duration
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Queue Frequency Size Seconds must be 30 seconds or more ";
+                    }
                     else
                     {
+                        // Check if subscription exists for client & queue
+                        var messageQueueSubscription = (await messageQueueSubscriptionService.GetAllAsync())
+                                            .Where(s => s.MessageQueueId == messageQueueSubscribeRequest.MessageQueueId &&
+                                                    s.MessageHubClientId == messageHubClient.Id).FirstOrDefault();
 
+
+                        switch (messageQueueSubscribeRequest.ActionName)
+                        {
+                            case "SUBSCRIBE":
+                                if (messageQueueSubscription == null)   // Not subscribed
+                                {
+                                    messageQueueSubscription = new MessageQueueSubscription()
+                                    {
+                                        Id = Guid.NewGuid().ToString(),
+                                        MessageHubClientId = messageHubClient.Id,
+                                        MessageQueueId = messageQueueSubscribeRequest.MessageQueueId
+                                    };
+
+                                    await messageQueueSubscriptionService.AddAsync(messageQueueSubscription);
+                                }
+
+                                // Add client subscription
+                                var clientSubscriptionInfo = _clientSubscriptionInfos.FirstOrDefault(s => s.MessageHubClientId == messageHubClient.Id);
+                                if (clientSubscriptionInfo == null)
+                                {
+                                    clientSubscriptionInfo = new ClientSubscriptionInfo()
+                                    {
+                                        MessageHubClientId = messageHubClient.Id,
+                                        QueueSizeFrequencySecs = messageQueueSubscribeRequest.QueueSizeFrequencySecs,
+                                        LastNotifyQueueSize = DateTimeOffset.MinValue   // Send queue size ASAP
+                                    };
+                                    _clientSubscriptionInfos.Add(clientSubscriptionInfo);
+                                }
+
+                                response.SubscribeId = messageQueueSubscription.Id;                                
+                                break;
+
+                            case "UNSUBSCRIBE":
+                                if (messageQueueSubscription != null)
+                                {
+                                    await messageQueueSubscriptionService.DeleteByIdAsync(messageQueueSubscription.Id);
+                                }
+
+                                _clientSubscriptionInfos.RemoveAll(s => s.MessageHubClientId == messageHubClient.Id);                                
+                                break;
+
+                            default:
+                                response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                                response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Action Name {messageQueueSubscribeRequest.ActionName} is invalid";
+                                break;
+                        }
                     }
 
                     // Send response
                     _messageQueueClientsConnection.SendMessageQueueSubscribeResponse(response, messageReceivedInfo);
                 }
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {messageQueueSubscribeRequest.TypeId}");
             });
         }
 
@@ -340,25 +556,35 @@ namespace CFMessageQueue.Hub
         private Task ExpireQueueMessagesAsync(string messageQueueId)
         {
             return Task.Factory.StartNew(async () =>
-            {
-                _lastExpireQueueMessages = DateTimeOffset.UtcNow;
-
-                using (var scope = _serviceProvider.CreateScope())
+            {                
+                var isHasMutex = false;
+                try
                 {
-                    // Get services
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+                    _lastExpireQueueMessages = DateTimeOffset.UtcNow;
 
-                    // Get expired messages
-                    var queueMessages = await queueMessageService.GetExpired(messageQueueId, DateTimeOffset.UtcNow);
+                    isHasMutex = _queueMutex.WaitOne();
 
-                    // Handle expired messages
-                    while (queueMessages.Any())
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        var queueMessage = queueMessages.First();
-                        queueMessages.Remove(queueMessage);
+                        // Get services
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
-                        await queueMessageService.DeleteByIdAsync(queueMessage.Id);
+                        // Get expired messages
+                        var queueMessages = await queueMessageService.GetExpired(messageQueueId, DateTimeOffset.UtcNow);
+
+                        // Handle expired messages
+                        while (queueMessages.Any())
+                        {
+                            var queueMessage = queueMessages.First();
+                            queueMessages.Remove(queueMessage);
+
+                            await queueMessageService.DeleteByIdAsync(queueMessage.Id);
+                        }
                     }
+                }
+                finally
+                {
+                    if (isHasMutex) _queueMutex.ReleaseMutex();
                 }
             });
         }        
@@ -407,6 +633,73 @@ namespace CFMessageQueue.Hub
             {
                 Console.WriteLine($"Error processing task {queueItemTask.QueueItem.ItemType}: {queueItemTask.Task.Exception.Message}");
             }
+        }
+
+        /// <summary>
+        /// Notifies subscriptions of queue events        
+        /// </summary>
+        /// <returns></returns>
+        private Task NotifySubscriptionsAsync()
+        {
+            return Task.Factory.StartNew(async () =>
+            {
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var queueMessageInternalService = scope.ServiceProvider.GetService<IQueueMessageInternalService>();
+
+                    // Notify message added
+                    foreach (var clientNotificationInfo in _clientSubscriptionInfos.Where(n => n.DoNotifyMessageAdded))
+                    {
+                        // TODO: How to work out which TCP connection belongs to the client
+
+                        var messageQueueNotification = new MessageQueueNotificationMessage()
+                        {
+                            EventName = MessageQueueEventNames.MessageAdded
+                        };
+
+                        // Reset flag
+                        clientNotificationInfo.DoNotifyMessageAdded = false;
+                    }
+
+                    // Notify queue cleared
+                    foreach (var clientNotificationInfo in _clientSubscriptionInfos.Where(n => n.DoNotifyQueueCleared))
+                    {
+                        // TODO: How to work out which TCP connection belongs to the client
+
+                        var messageQueueNotification = new MessageQueueNotificationMessage()
+                        {
+                            EventName = MessageQueueEventNames.QueueCleared
+                        };
+
+                        // Reset flag
+                        clientNotificationInfo.DoNotifyQueueCleared = false;
+                    }
+
+                    // Notify queue size
+                    long queueSize = -1;
+                    foreach (var clientNotificationInfo in _clientSubscriptionInfos.Where(n => n.DoNotifyQueueSize))
+                    {
+                        if (queueSize == -1)
+                        {
+                            queueSize = (await queueMessageInternalService.GetAllAsync())
+                                        .Where(m => m.MessageQueueId == _messageQueue.Id).Count();
+
+                        }
+
+                        // TODO: How to work out which TCP connection belongs to the client
+
+                        var messageQueueNotification = new MessageQueueNotificationMessage()
+                        {
+                            EventName = MessageQueueEventNames.QueueSize,
+                            QueueSize = queueSize
+                        };
+
+                        // Reset flag
+                        clientNotificationInfo.LastNotifyQueueSize = DateTimeOffset.UtcNow;
+                        clientNotificationInfo.DoNotifyQueueSize = false;
+                    }
+                }
+            });        
         }
     }
 }

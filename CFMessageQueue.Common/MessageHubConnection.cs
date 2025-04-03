@@ -46,6 +46,8 @@ namespace CFMessageQueue
             };
         }
 
+        public MessageConverterList MessageConverterList => _messageConverterList;
+
         public void Dispose()
         {            
             if (_connection != null)

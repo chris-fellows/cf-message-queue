@@ -7,7 +7,6 @@ using CFMessageQueue.Enums;
 using CFMessageQueue.Hub.Models;
 using CFMessageQueue.Hub;
 using CFMessageQueue.Interfaces;
-using System.Xml.Serialization;
 using CFMessageQueue.Services;
 using CFMessageQueue.Logs;
 using CFMessageQueue.Models;
@@ -115,7 +114,7 @@ internal static class Program
         var queueMessageHub = new QueueMessageHub()
         {
             Id = Guid.NewGuid().ToString(),
-            Ip = GetLocalIp(),
+            Ip = NetworkUtilities.GetLocalIPV4Addresses().First(),
             Port = systemConfig.LocalPort,
             SecurityItems = new List<SecurityItem>()
                 {
@@ -136,17 +135,6 @@ internal static class Program
         return queueMessageHub;
     }
 
-    private static string GetLocalIp()
-    {
-        var hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-        return hostEntry.AddressList[0].ToString();
-    }
-
-    private static void Default_Unloading(AssemblyLoadContext obj)
-    {
-        throw new NotImplementedException();
-    }
-
     private static SystemConfig GetSystemConfig()
     {            
         return new SystemConfig()
@@ -154,6 +142,8 @@ internal static class Program
             LocalPort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["LocalPort"].ToString()),
             MinQueuePort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MinQueuePort"].ToString()),
             MaxQueuePort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MaxQueuePort"].ToString()),
+            MaxLogDays = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MaxLogDays"].ToString()),
+            LogFolder = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "Log"),
             AdminSecurityKey = System.Configuration.ConfigurationManager.AppSettings["AdminSecurityKey"].ToString()
         };
     }
@@ -180,14 +170,18 @@ internal static class Program
              {
                  return new XmlMessageQueueService(Path.Combine(configFolder, "MessageQueue"));
              })
+             .AddScoped<IMessageQueueSubscriptionService>((scope) =>
+             {
+                 return new XmlMessageQueueSubscriptionService(Path.Combine(configFolder, "MessageQueueSubscription"));
+             })
              .AddScoped<IQueueMessageInternalService>((scope) =>
              {
-                return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessage"));
+                return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessageInternal"));
              })
               .AddScoped<IQueueMessageHubService>((scope) =>
               {
                   return new XmlQueueMessageHubService(Path.Combine(configFolder, "QueueMessageHub"));
-              })
+              })              
 
               // Add logging (Console & CSV)
               .AddScoped<ISimpleLog>((scope) =>
