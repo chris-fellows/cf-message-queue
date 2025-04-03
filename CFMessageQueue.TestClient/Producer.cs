@@ -57,7 +57,7 @@ namespace CFMessageQueue.TestClient
             var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == _producerConfig.MessageQueueName);
 
             // Create message queue client
-            var messageQueueClientConnector = new MessageQueueClientConnector(_producerConfig.DefaultSecurityKey);
+            var messageQueueClientConnector = new MessageQueueClientConnector(_producerConfig.DefaultSecurityKey, _producerConfig.LocalPort);
             messageQueueClientConnector.SetMessageQueue(messageQueue);
 
             var stopwatch = new Stopwatch();
@@ -68,7 +68,7 @@ namespace CFMessageQueue.TestClient
                 {
                     Id = Guid.NewGuid().ToString(),
                     CreatedDateTime = DateTimeOffset.UtcNow,
-                    TypeId = "Test1"
+                    TypeId = "Test1"                     
                 };
                 messageQueueClientConnector.SendAsync(queueMessage).Wait();
 

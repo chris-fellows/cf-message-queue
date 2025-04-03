@@ -25,6 +25,16 @@ namespace CFMessageQueue.TestClient.Models
         /// </summary>
         public static string DefaultHubSecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
-        public static string QueueName1 { get; set; } = "Queue 1";        
+        public static string QueueName1 { get; set; } = "Queue 1";
+
+        /// <summary>
+        /// Local port for hub communications
+        /// </summary>
+        public static int HubClientLocalPort { get; set; } = 10100;
+
+        /// <summary>
+        /// Local port for queue specific communications
+        /// </summary>
+        public static int QueueLocalPort { get; set; } = 10101;
     }
 }

@@ -327,7 +327,7 @@ namespace CFMessageQueue
                 case MessageTypeIds.AddMessageQueueResponse:
                     return _messageConverterList.AddMessageQueueResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.AddQueueMessageResponse:
-                    return _messageConverterList.AddMessageQueueResponseConverter.GetExternalMessage(connectionMessage);
+                    return _messageConverterList.AddQueueMessageResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.ConfigureMessageHubClientResponse:
                     return _messageConverterList.ConfigureMessageHubClientResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetMessageHubsResponse:

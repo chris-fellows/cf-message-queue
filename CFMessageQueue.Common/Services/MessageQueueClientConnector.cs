@@ -18,9 +18,12 @@ namespace CFMessageQueue.Services
 
         private readonly string _securityKey;
 
-        public MessageQueueClientConnector(string securityKey)
+        private int _localPort;
+
+        public MessageQueueClientConnector(string securityKey, int localPort)
         {
             _securityKey = securityKey;
+            _localPort = localPort;
         }
 
         public void Dispose()
@@ -30,8 +33,60 @@ namespace CFMessageQueue.Services
 
         public void SetMessageQueue(MessageQueue messageQueue)
         {
+            // Clean up
+            _messageHubConnection.StopListening();
+
             _messageQueue = messageQueue;
-            _messageHubConnection = new MessageHubConnection();            
+            _messageHubConnection = new MessageHubConnection();
+          
+            _messageHubConnection.StartListening(_localPort);
+        }
+
+        /// <summary>
+        /// Gets queue message in internal format (Serialized content)
+        /// </summary>
+        /// <param name="queueMessage"></param>
+        /// <returns></returns>
+        private static QueueMessageInternal GetQueueMessageInternal(QueueMessage queueMessage)
+        {
+            var serializer = new QueueMessageContentSerializer();
+
+            var queueMessageInternal = new QueueMessageInternal()
+            {
+                Id = queueMessage.Id,                
+                Content = serializer.Serialize(queueMessage.Content, queueMessage.Content.GetType()),
+                ContentType = queueMessage.Content.GetType().AssemblyQualifiedName,
+                CreatedDateTime = queueMessage.CreatedDateTime,
+                ExpirySeconds = queueMessage.ExpirySeconds,
+                MessageQueueId = queueMessage.MessageQueueId,
+                SenderMessageHubClientId = queueMessage.SenderMessageHubClientId,
+                TypeId = queueMessage.TypeId                 
+            };
+
+            return queueMessageInternal;
+        }
+
+        /// <summary>
+        /// Gets queue message in external format (Deserialized content)
+        /// </summary>
+        /// <param name="queueMessageInternal"></param>
+        /// <returns></returns>
+        private static QueueMessage GetQueueMessageExternal(QueueMessageInternal queueMessageInternal)
+        {
+            var serializer = new QueueMessageContentSerializer();
+
+            var queueMessage = new QueueMessage()
+            {
+                Id = queueMessageInternal.Id,
+                Content = serializer.Deserialize(queueMessageInternal.Content, Type.GetType(queueMessageInternal.ContentType)),
+                CreatedDateTime = queueMessageInternal.CreatedDateTime,
+                ExpirySeconds = queueMessageInternal.ExpirySeconds,
+                MessageQueueId = queueMessageInternal.MessageQueueId,
+                SenderMessageHubClientId = queueMessageInternal.SenderMessageHubClientId,
+                TypeId = queueMessageInternal.TypeId
+            };
+
+            return queueMessage;
         }
 
         public async Task SendAsync(QueueMessage queueMessage)
@@ -39,8 +94,8 @@ namespace CFMessageQueue.Services
             var addQueueMessageRequest = new AddQueueMessageRequest()
             {
                 SecurityKey = _securityKey,
-                QueueMessage = queueMessage,
-                MessageQueueId = _messageQueue.Id
+                QueueMessage = GetQueueMessageInternal(queueMessage),
+                MessageQueueId = _messageQueue.Id                
             };
 
             var remoteEndpointInfo = new EndpointInfo()
@@ -78,8 +133,8 @@ namespace CFMessageQueue.Services
             {
                 var response = _messageHubConnection.SendGetNextQueueMessageRequest(getNextQueueMessageRequest, remoteEndpointInfo);
                 ThrowResponseExceptionIfRequired(response);
-
-                return response.QueueMessage;
+                
+                return response.QueueMessage == null ? null : GetQueueMessageExternal(response.QueueMessage);
             }
             catch (MessageConnectionException messageConnectionException)
             {

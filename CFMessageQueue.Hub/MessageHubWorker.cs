@@ -1,4 +1,5 @@
 ﻿using CFConnectionMessaging.Models;
+using CFMessageQueue.Common;
 using CFMessageQueue.Constants;
 using CFMessageQueue.Enums;
 using CFMessageQueue.Hub.Enums;
@@ -37,12 +38,16 @@ namespace CFMessageQueue.Hub
         private DateTimeOffset _messageHubClientsLastRefresh = DateTimeOffset.MinValue;
         private readonly Dictionary<string, MessageHubClient> _messageHubClientsBySecurityKey = new();
 
+        private readonly SystemConfig _systemConfig;
+
         public MessageHubWorker(QueueMessageHub queueMessageHub, IServiceProvider serviceProvider,
-                                 List<MessageQueueWorker> messageQueueWorkers)
+                                 List<MessageQueueWorker> messageQueueWorkers, 
+                                 SystemConfig  systemConfig)
         {
             _queueMessageHub = queueMessageHub;
             _messageQueueWorkers = messageQueueWorkers;
             _serviceProvider = serviceProvider;
+            _systemConfig = systemConfig;
 
             _messageHubClientsConnection = new MessageHubClientsConnection(serviceProvider);
             _messageHubClientsConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
@@ -231,7 +236,7 @@ namespace CFMessageQueue.Hub
         {
             return Task.Factory.StartNew(async () =>
             {
-                Console.WriteLine($"Processing {getMessageQueuesRequest.TypeId}");
+                Console.WriteLine($"Processing {getMessageQueuesRequest.TypeId} (Security Key={getMessageQueuesRequest.SecurityKey})");
 
                 using (var scope = _serviceProvider.CreateScope())
                 {
@@ -255,7 +260,7 @@ namespace CFMessageQueue.Hub
 
                     if (messageHubClient == null)
                     {
-                        Console.WriteLine("HandleGetMessageQueued: No message hub client");
+                        Console.WriteLine($"HandleGetMessageQueued: No message hub client (Cache count={_messageHubClientsBySecurityKey.Count})");
 
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -393,7 +398,7 @@ namespace CFMessageQueue.Hub
                     var messageHubService = scope.ServiceProvider.GetRequiredService<IQueueMessageHubService>();
                     var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                     var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
                     var queueMessageHubService = scope.ServiceProvider.GetRequiredService<IQueueMessageHubService>();
 
                     var response = new ExecuteMessageQueueActionResponse()
@@ -661,41 +666,50 @@ namespace CFMessageQueue.Hub
                     }
                     else
                     {
+                        var messageQueues = await messageQueueService.GetAllAsync();                        
+
                         // Add message queue
                         var messageQueue = new MessageQueue()
                         {
                             Id = Guid.NewGuid().ToString(),
                             Name = addMessageQueueRequest.MessageQueueName,
-                            Ip = GetLocalIp(),
-                            Port = 10001,   // TODO: Set this correctly
+                            Ip = NetworkUtilities.GetLocalIPV4Addresses()[0],
+                            Port = GetFreeQueuePort(messageQueues),
                             SecurityItems = new List<SecurityItem>()
                         };
 
-                        // If message hub has Admin role then give hub client full permissions on queue
-                        var queueMessageHub = await messageHubService.GetByIdAsync(_queueMessageHub.Id);
-                        if (queueMessageHub.SecurityItems.Any(si => si.RoleTypes.Contains(RoleTypes.Admin)))
+                        if (messageQueue.Port == 0)    // No free port
                         {
-                            queueMessageHub.SecurityItems.Add(new SecurityItem()
+                            response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                            response.Response.ErrorMessage = "No free ports";
+                        }
+                        else
+                        {
+                            // If message hub has Admin role then give hub client full permissions on queue
+                            var queueMessageHub = await messageHubService.GetByIdAsync(_queueMessageHub.Id);
+                            if (queueMessageHub.SecurityItems.Any(si => si.RoleTypes.Contains(RoleTypes.Admin)))
                             {
-                                MessageHubClientId = messageHubClient.Id,
-                                RoleTypes = new List<RoleTypes>()
+                                queueMessageHub.SecurityItems.Add(new SecurityItem()
                                 {
-                                    RoleTypes.ClearQueue,
+                                    MessageHubClientId = messageHubClient.Id,
+                                    RoleTypes = new List<RoleTypes>()
+                                {
                                     RoleTypes.ReadQueue,
                                     RoleTypes.WriteQueue,
                                     RoleTypes.SubscribeQueue
                                 }
-                            });
-                        }                        
+                                });
+                            }
 
-                        await messageQueueService.AddAsync(messageQueue);
+                            await messageQueueService.AddAsync(messageQueue);
 
-                        response.MessageQueueId = messageQueue.Id;
+                            response.MessageQueueId = messageQueue.Id;
 
-                        // Add message queue worker
-                        var messageQueueWorker = new MessageQueueWorker(messageQueue, _serviceProvider);
-                        messageQueueWorker.Start();
-                        _messageQueueWorkers.Add(messageQueueWorker);                        
+                            // Add message queue worker
+                            var messageQueueWorker = new MessageQueueWorker(messageQueue, _serviceProvider);
+                            messageQueueWorker.Start();
+                            _messageQueueWorkers.Add(messageQueueWorker);
+                        }
                     }
 
                     // Send response
@@ -706,11 +720,34 @@ namespace CFMessageQueue.Hub
             });
         }
 
+        /// <summary>
+        /// Returns a free port or 0 if none
+        /// </summary>
+        /// <param name="messageQueues"></param>
+        /// <returns></returns>
+        private int GetFreeQueuePort(List<MessageQueue> messageQueues)
+        {
+            int localPort = _systemConfig.MinQueuePort - 1;
+
+            do
+            {
+                localPort++;
+
+                if (!messageQueues.Any(q => q.Port == localPort))
+                {
+                    return localPort;
+                }
+                else if (localPort >= _systemConfig.MaxQueuePort)
+                {
+                    return 0;
+                }
+            } while (true);           
+        }
+
         private MessageHubClient? GetMessageHubClientBySecurityKey(string securityKey, IMessageHubClientService messageHubClientService)
         {            
             if (_messageHubClientsLastRefresh.AddMinutes(5) <= DateTimeOffset.UtcNow)       // Periodic refresh
-            {
-                _messageHubClientsLastRefresh = DateTimeOffset.UtcNow;
+            {                
                 _messageHubClientsBySecurityKey.Clear();
             }
             if (!_messageHubClientsBySecurityKey.Any())   // Cache empty, load it
@@ -722,19 +759,15 @@ namespace CFMessageQueue.Hub
 
         private void RefreshMessageHubClients(IMessageHubClientService messageHubClientService)
         {
+            _messageHubClientsLastRefresh = DateTimeOffset.UtcNow;
+
             _messageHubClientsBySecurityKey.Clear();
             var messageHubClients = messageHubClientService.GetAll();
             foreach (var messageHubClient in messageHubClients)
             {
                 _messageHubClientsBySecurityKey.TryAdd(messageHubClient.SecurityKey, messageHubClient);
             }
-        }
-
-        private static string GetLocalIp()
-        {
-            var hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-            return hostEntry.AddressList[0].ToString();
-        }
+        }     
 
         private void CheckCompleteQueueItemTasks(List<QueueItemTask> queueItemTasks)
         {

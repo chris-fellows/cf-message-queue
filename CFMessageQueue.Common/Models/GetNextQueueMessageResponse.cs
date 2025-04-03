@@ -9,7 +9,7 @@ namespace CFMessageQueue.Models
 {
     public class GetNextQueueMessageResponse : MessageBase
     {
-        public QueueMessage? QueueMessage { get; set; }
+        public QueueMessageInternal? QueueMessage { get; set; }
 
         public GetNextQueueMessageResponse()
         {

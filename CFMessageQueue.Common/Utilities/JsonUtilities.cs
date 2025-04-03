@@ -23,6 +23,16 @@ namespace CFMessageQueue.Utilities
             }
         }
 
+        public static string SerializeToString(object item, Type objectType, JsonSerializerOptions options)
+        {
+            return JsonSerializer.Serialize(item, options);
+        }
+
+        public static object DeserializeFromString(string json, Type objectType, JsonSerializerOptions options)
+        {
+            return JsonSerializer.Deserialize(json, objectType, options)!;
+        }
+
         public static string SerializeToString<T>(T item, JsonSerializerOptions options)
         {
             return JsonSerializer.Serialize(item, options);

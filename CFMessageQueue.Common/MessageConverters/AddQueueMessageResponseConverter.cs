@@ -19,17 +19,7 @@ namespace CFMessageQueue.MessageConverters
                 Id = externalMessage.Id,
                 TypeId = externalMessage.TypeId,
                 Parameters = new List<ConnectionMessageParameter>()
-                {
-                    new ConnectionMessageParameter()
-                    {
-                        Name = "Ip",
-                        Value = externalMessage.Ip
-                    },
-                    new ConnectionMessageParameter()
-                    {
-                        Name = "Port",
-                        Value = externalMessage.Port.ToString()
-                    },
+                {                  
                    new ConnectionMessageParameter()
                     {
                         Name = "Response",
@@ -46,9 +36,7 @@ namespace CFMessageQueue.MessageConverters
         {
             var externalMessage = new AddQueueMessageResponse()
             {
-                Id = connectionMessage.Id,
-                Ip = connectionMessage.Parameters.First(p => p.Name == "Ip").Value,
-                Port = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "Port").Value)
+                Id = connectionMessage.Id                
             };
 
             // Get response

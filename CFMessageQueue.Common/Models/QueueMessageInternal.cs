@@ -1,9 +1,15 @@
-﻿namespace CFMessageQueue.Models
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace CFMessageQueue.Models
 {
     /// <summary>
-    /// Queue messaage (External format)
-    /// </summary>    
-    public class QueueMessage
+    /// Queue message (Internal format with serialized body)
+    /// </summary>
+    public class QueueMessageInternal
     {
         public string Id { get; set; } = String.Empty;
 
@@ -25,7 +31,7 @@
         /// <summary>
         /// Created time
         /// </summary>
-        public DateTimeOffset CreatedDateTime { get; set; }        
+        public DateTimeOffset CreatedDateTime { get; set; }
 
         /// <summary>
         /// Expiry time (Seconds)
@@ -35,6 +41,11 @@
         /// <summary>
         /// Message content
         /// </summary>
-        public object? Content { get; set; }       
+        public byte[] Content { get; set; } = new byte[0];
+
+        /// <summary>
+        /// Content type (Type name)
+        /// </summary>
+        public string ContentType { get; set; } = String.Empty;
     }
 }

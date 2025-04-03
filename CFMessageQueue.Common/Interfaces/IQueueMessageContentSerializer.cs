@@ -5,8 +5,8 @@
     /// </summary>
     public interface IQueueMessageContentSerializer
     {
-        byte[] Serialize<TEntity>(TEntity entity);
+        byte[] Serialize(object entity, Type entityType);
 
-        TEntity Deserialize<TEntity>(byte[] content);
+        object Deserialize(byte[] content, Type entityType);
     }
 }

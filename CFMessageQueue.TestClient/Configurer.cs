@@ -15,10 +15,8 @@ namespace CFMessageQueue.TestClient
 {
     internal class Configurer
     {
-        public async Task<string> CreateMessageQueueAsync(EndpointInfo hubEndpointInfo, string name)
-        {
-            int localPort = 10010;
-
+        public async Task<string> CreateMessageQueueAsync(EndpointInfo hubEndpointInfo, string name, int localPort)
+        {            
             using (var messageHubClientConnector = new MessageHubClientConnector(hubEndpointInfo, SystemConfig.AdminSecurityKey, "", localPort))
             {
 
@@ -29,12 +27,12 @@ namespace CFMessageQueue.TestClient
             }
         }     
 
-        public async Task<string> CreateMessageHubClientAsync(EndpointInfo hubEndpointInfo, string messageQueueId, string clientSecurityKey)
+        public async Task<string> CreateMessageHubClientAsync(EndpointInfo hubEndpointInfo, string messageQueueId, string clientSecurityKey, int localPort)
         {            
             //var adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
             //var defaultSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
-            int localPort = 10010;
+            //int localPort = 10010;
 
             /*
             var remoteEndpointInfo = new EndpointInfo()

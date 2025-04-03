@@ -10,14 +10,14 @@ namespace CFMessageQueue.Services
 {
     public class QueueMessageContentSerializer : IQueueMessageContentSerializer
     {
-        public byte[] Serialize<TEntity>(TEntity entity)
+        public byte[] Serialize(object entity, Type entityType)
         {
-            return Encoding.UTF8.GetBytes(JsonUtilities.SerializeToString(entity, JsonUtilities.DefaultJsonSerializerOptions));            
+            return Encoding.UTF8.GetBytes(JsonUtilities.SerializeToString(entity, entityType, JsonUtilities.DefaultJsonSerializerOptions));            
         }
 
-        public TEntity Deserialize<TEntity>(byte[] content)
+        public object Deserialize(byte[] content, Type entityType)
         {
-            return JsonUtilities.DeserializeFromString<TEntity>(Encoding.UTF8.GetString(content), JsonUtilities.DefaultJsonSerializerOptions);
+            return JsonUtilities.DeserializeFromString(Encoding.UTF8.GetString(content), entityType, JsonUtilities.DefaultJsonSerializerOptions);
         }
     }
 }

@@ -57,7 +57,7 @@ namespace CFMessageQueue.MessageConverters
             var queueMessageParameter = connectionMessage.Parameters.First(p => p.Name == "QueueMessage");
             if (!String.IsNullOrEmpty(queueMessageParameter.Value))
             {
-                externalMessage.QueueMessage = JsonUtilities.DeserializeFromBase64String<QueueMessage>(queueMessageParameter.Value, JsonUtilities.DefaultJsonSerializerOptions);
+                externalMessage.QueueMessage = JsonUtilities.DeserializeFromBase64String<QueueMessageInternal>(queueMessageParameter.Value, JsonUtilities.DefaultJsonSerializerOptions);
             }
 
             return externalMessage;

@@ -11,15 +11,13 @@ using System.Xml.Serialization;
 using CFMessageQueue.Services;
 using CFMessageQueue.Logs;
 using CFMessageQueue.Models;
+using CFMessageQueue.Common;
 
 internal static class Program
 {
     private static void Main(string[] args)
     {
-        var id = Guid.NewGuid().ToString();        
-
-        var hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-        Console.WriteLine($"Starting CF Message Queue Hub ({hostEntry.AddressList[0].ToString()})");
+        Console.WriteLine($"Starting CF Message Queue Hub ({NetworkUtilities.GetLocalIPV4Addresses()[0]})");
 
         var systemConfig = GetSystemConfig();
 
@@ -30,7 +28,7 @@ internal static class Program
         var messageQueueService = serviceProvider.GetRequiredService<IMessageQueueService>();
         var queueMessageHubService = serviceProvider.GetRequiredService<IQueueMessageHubService>();
 
-        const string adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
+        //const string adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
         //const string defaultSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
         // Get message hub clients (if any), create default admin client if required
@@ -41,12 +39,12 @@ internal static class Program
             var messageHubClient = new MessageHubClient()
             {
                 Id = Guid.NewGuid().ToString(),
-                SecurityKey = adminSecurityKey                
+                SecurityKey = systemConfig.AdminSecurityKey                
             };
             messageHubClientService.AddAsync(messageHubClient).Wait();
             messageHubClients.Add(messageHubClient);
         }
-        var adminMessageHubClient = messageHubClients.First(c => c.SecurityKey == adminSecurityKey);
+        var adminMessageHubClient = messageHubClients.First(c => c.SecurityKey == systemConfig.AdminSecurityKey);
 
         // Check for queue message hubs. Should just be one entity as we only know about this hub
         var queueMessageHubs = queueMessageHubService.GetAllAsync().Result;
@@ -66,7 +64,7 @@ internal static class Program
         }
 
         // Start hub worker
-        var messageHubWorker = new MessageHubWorker(queueMessageHubs.First(), serviceProvider, messageQueueWorkers);
+        var messageHubWorker = new MessageHubWorker(queueMessageHubs.First(), serviceProvider, messageQueueWorkers, systemConfig);
         messageHubWorker.Start();
 
         // Start queue workers
@@ -153,7 +151,10 @@ internal static class Program
     {            
         return new SystemConfig()
         {
-            LocalPort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["LocalPort"].ToString())
+            LocalPort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["LocalPort"].ToString()),
+            MinQueuePort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MinQueuePort"].ToString()),
+            MaxQueuePort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MaxQueuePort"].ToString()),
+            AdminSecurityKey = System.Configuration.ConfigurationManager.AppSettings["AdminSecurityKey"].ToString()
         };
     }
 
@@ -179,9 +180,9 @@ internal static class Program
              {
                  return new XmlMessageQueueService(Path.Combine(configFolder, "MessageQueue"));
              })
-             .AddScoped<IQueueMessageService>((scope) =>
+             .AddScoped<IQueueMessageInternalService>((scope) =>
              {
-                return new XmlQueueMessageService(Path.Combine(configFolder, "QueueMessage"));
+                return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessage"));
              })
               .AddScoped<IQueueMessageHubService>((scope) =>
               {

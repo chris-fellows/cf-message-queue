@@ -172,7 +172,7 @@ namespace CFMessageQueue.Hub
                 {
                     var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                     var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
                     var response = new AddQueueMessageResponse()
                     {
@@ -229,7 +229,7 @@ namespace CFMessageQueue.Hub
                 {
                     var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                     var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
                     var response = new GetNextQueueMessageResponse()
                     {
@@ -287,7 +287,7 @@ namespace CFMessageQueue.Hub
                     // TODO: Save subscription
                     var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                     var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
                     // Save subscription
                     var messageQueueSubscription = new MessageQueueSubscription()
@@ -346,7 +346,7 @@ namespace CFMessageQueue.Hub
                 using (var scope = _serviceProvider.CreateScope())
                 {
                     // Get services
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
                     // Get expired messages
                     var queueMessages = await queueMessageService.GetExpired(messageQueueId, DateTimeOffset.UtcNow);

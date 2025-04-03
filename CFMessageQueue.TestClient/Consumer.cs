@@ -56,7 +56,7 @@ namespace CFMessageQueue.TestClient
             var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == _consumerConfig.MessageQueueName);
 
             // Create message queue client
-            var messageQueueClientConnector = new MessageQueueClientConnector(_consumerConfig.DefaultSecurityKey);
+            var messageQueueClientConnector = new MessageQueueClientConnector(_consumerConfig.DefaultSecurityKey, _consumerConfig.LocalPort);
             messageQueueClientConnector.SetMessageQueue(messageQueue);
 
             var stopwatch = new Stopwatch();

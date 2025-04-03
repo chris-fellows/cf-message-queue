@@ -4,7 +4,7 @@ namespace CFMessageQueue.Models
 {
     public class AddQueueMessageRequest : MessageBase
     {
-        public QueueMessage QueueMessage { get; set; }
+        public QueueMessageInternal QueueMessage { get; set; }
 
         public string MessageQueueId { get; set; } = String.Empty;
 
