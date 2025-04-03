@@ -1,0 +1,30 @@
+﻿using CFConnectionMessaging.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace CFMessageQueue.TestClient.Models
+{
+    internal class SystemConfig
+    {
+        public static EndpointInfo HubEndpointInfo { get; set; } = new EndpointInfo() { Ip = "192.168.1.45", Port = 10000 };
+
+        public static string Client1SecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
+
+        public static string Client2SecurityKey { get; set; } = "6c3f7a9e-3ab8-428c-864a-b01c936bccf9";
+
+        /// <summary>
+        /// Security key for admin functions. E.g. Create clients etc
+        /// </summary>
+        public static string AdminSecurityKey { get; set; } = "5005db05-35eb-4471-bd05-7883b746b196";
+
+        /// <summary>
+        /// Default hub security key. E.g. Get queues
+        /// </summary>
+        public static string DefaultHubSecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
+
+        public static string QueueName1 { get; set; } = "Queue 1";        
+    }
+}

@@ -8,7 +8,8 @@
         Admin,                  // Hub level
         GetMessageHubs,         // Hub level
         GetMessageQueues,       // Hub level
-        ClearQueue,             // Queue level
+        //DeleteQueue,            // Hub level
+        //ClearQueue,             // Hub level
         ReadQueue,              // Queue level
         SubscribeQueue,         // Queue level
         WriteQueue,             // Queue level

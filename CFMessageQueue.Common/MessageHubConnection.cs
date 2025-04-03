@@ -15,7 +15,7 @@ namespace CFMessageQueue
     /// <summary>
     /// Connection to Message Hub
     /// </summary>
-    public class MessageHubConnection
+    public class MessageHubConnection : IDisposable
     {
         private ConnectionTcp _connection = new ConnectionTcp();
 
@@ -46,6 +46,14 @@ namespace CFMessageQueue
             };
         }
 
+        public void Dispose()
+        {            
+            if (_connection != null)
+            {                
+                _connection.Dispose();  // Stops listening, no need to call it explicitly
+            }
+        }
+
         public void StartListening(int port)
         {
             //_log.Log(DateTimeOffset.UtcNow, "Information", $"Listening on port {port}");
@@ -68,6 +76,7 @@ namespace CFMessageQueue
                 MessageTypeIds.AddMessageQueueResponse,
                 MessageTypeIds.AddQueueMessageResponse,
                 MessageTypeIds.ConfigureMessageHubClientResponse,
+                MessageTypeIds.ExecuteMessageQueueActionResponse,
                 MessageTypeIds.GetMessageHubsResponse,
                 MessageTypeIds.GetMessageQueuesResponse,
                 MessageTypeIds.GetNextQueueMessageResponse,
@@ -76,7 +85,29 @@ namespace CFMessageQueue
 
             return responseMessageTypeIds.Contains(connectionMessage.TypeId);            
         }
-        
+
+        public ExecuteMessageQueueActionResponse SendExecuteMessageQueueActionRequest(ExecuteMessageQueueActionRequest executeMessageQueueActionRequest, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.ExecuteMessageQueueActionRequestConverter.GetConnectionMessage(executeMessageQueueActionRequest), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(executeMessageQueueActionRequest, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+
+            if (isGotAllMessages)
+            {
+                return (ExecuteMessageQueueActionResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to execute message queue action");
+        }
+
+
         public AddMessageHubClientResponse SendAddMessageHubClientRequest(AddMessageHubClientRequest addMessageHubClientRequest, EndpointInfo remoteEndpointInfo)
         {
             _connection.SendMessage(_messageConverterList.AddMessageHubClientRequestConverter.GetConnectionMessage(addMessageHubClientRequest), remoteEndpointInfo);

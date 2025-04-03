@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.Services
 {
-    public class MessageQueueClientService : IMessageQueueClientConnector
+    public class MessageQueueClientConnector : IMessageQueueClientConnector, IDisposable
     {
         private MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
@@ -18,9 +18,14 @@ namespace CFMessageQueue.Services
 
         private readonly string _securityKey;
 
-        public MessageQueueClientService(string securityKey)
+        public MessageQueueClientConnector(string securityKey)
         {
             _securityKey = securityKey;
+        }
+
+        public void Dispose()
+        {
+            _messageHubConnection.Dispose();            
         }
 
         public void SetMessageQueue(MessageQueue messageQueue)

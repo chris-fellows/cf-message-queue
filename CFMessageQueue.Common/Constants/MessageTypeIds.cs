@@ -20,6 +20,9 @@ namespace CFMessageQueue.Constants
         public const string ConfigureMessageHubClientRequest = "ConfigureMessageHubClientRequest";
         public const string ConfigureMessageHubClientResponse = "ConfigureMessageHubClientResponse";
 
+        public const string ExecuteMessageQueueActionRequest = "ExecuteMessageQueueActionRequest";
+        public const string ExecuteMessageQueueActionResponse = "ExecuteMessageQueueActionResponse";
+
         public const string GetMessageHubsRequest = "GetMessageHubsRequest";
         public const string GetMessageHubsResponse = "GetMessageHubsResponse";
 

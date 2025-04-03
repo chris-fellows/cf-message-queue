@@ -5,6 +5,7 @@ using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,7 +13,7 @@ using System.Xml.Linq;
 
 namespace CFMessageQueue.Services
 {
-    public class MessageHubClientConnector : IMessageHubClientConnector
+    public class MessageHubClientConnector : IMessageHubClientConnector, IDisposable
     {
         private readonly MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
@@ -21,7 +22,7 @@ namespace CFMessageQueue.Services
         private readonly string _defaultSecurityKey;
 
         public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string adminSecurityKey, string defaultSecurityKey, int localPort)
-        {
+        {            
             _remoteEndpointInfo = remoteEndpointInfo;
             _adminSecurityKey = adminSecurityKey;
             _defaultSecurityKey = defaultSecurityKey;
@@ -29,7 +30,12 @@ namespace CFMessageQueue.Services
             _messageHubConnection.StartListening(localPort);
         }
 
-        public Task ConfigureMessageHubClient(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
+        public void Dispose()
+        {
+            _messageHubConnection.Dispose();
+        }
+
+        public Task ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
         {
             var configureMessageHubClientRequest = new ConfigureMessageHubClientRequest()
             {
@@ -71,6 +77,50 @@ namespace CFMessageQueue.Services
             {
                 throw new MessageQueueException("Error adding message queue", messageConnectionException);
             }
+        }
+
+        public Task DeleteMessageQueueAsync(string messageQueueId)
+        {
+            var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
+            {
+                SecurityKey = _adminSecurityKey,
+                MessageQueueId = messageQueueId,
+                ActionName = "DELETE"
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendExecuteMessageQueueActionRequest(executeMessageQueueActionRequest, _remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);                
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error deleting message queue", messageConnectionException);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task ClearMessageQueueAsync(string messageQueueId)
+        {
+            var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
+            {
+                SecurityKey = _adminSecurityKey,
+                MessageQueueId = messageQueueId,
+                ActionName = "CLEAR"
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendExecuteMessageQueueActionRequest(executeMessageQueueActionRequest, _remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);                
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error deleting message queue", messageConnectionException);
+            }
+
+            return Task.CompletedTask;
         }
 
         public Task<string> AddMessageHubClientAsync(string securityKey)

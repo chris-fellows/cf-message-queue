@@ -9,12 +9,6 @@ using CFMessageQueue.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Data.Common;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CFMessageQueue.Hub
 {
@@ -37,6 +31,9 @@ namespace CFMessageQueue.Hub
 
         private DateTimeOffset _messageHubClientsLastRefresh = DateTimeOffset.MinValue;
         private readonly Dictionary<string, MessageHubClient> _messageHubClientsBySecurityKey = new();
+
+        private TimeSpan _expireMessagesFrequency = TimeSpan.FromSeconds(60);
+        private DateTimeOffset _lastExpireQueueMessages = DateTimeOffset.MinValue;
 
         public MessageQueueWorker(MessageQueue messageQueue, IServiceProvider serviceProvider)
         {
@@ -65,6 +62,8 @@ namespace CFMessageQueue.Hub
             _timer.Enabled = false;
         }
 
+        public string MessageQueueId => _messageQueue.Id;
+
         public void Start()
         {
             //_log.Log(DateTimeOffset.UtcNow, "Information", "Worker starting");
@@ -88,6 +87,12 @@ namespace CFMessageQueue.Hub
             try
             {
                 _timer.Enabled = false;
+
+                // Check if need to expire messages
+                if (_lastExpireQueueMessages.Add(_expireMessagesFrequency) <= DateTimeOffset.UtcNow)
+                {
+                    _queueItems.Append(new QueueItem() { ItemType = QueueItemTypes.ExpireQueueMessages });
+                }
 
                 ProcessQueueItems(() =>
                 {
@@ -147,6 +152,10 @@ namespace CFMessageQueue.Hub
                         break;
                 }
             }
+            else if (queueItem.ItemType == QueueItemTypes.ExpireQueueMessages)
+            {
+                _queueItemTasks.Add(new QueueItemTask(ExpireQueueMessagesAsync(_messageQueue.Id), queueItem));
+            }
         }
 
         /// <summary>
@@ -191,7 +200,11 @@ namespace CFMessageQueue.Hub
                     }
                     else
                     {
-                        
+                        // Set message queue
+                        addQueueMessageRequest.QueueMessage.MessageQueueId = _messageQueue.Id;
+
+                        // Set the sender
+                        addQueueMessageRequest.QueueMessage.SenderMessageHubClientId = messageHubClient.Id;
 
                         await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);
                     }
@@ -243,8 +256,14 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
                     }
                     else
-                    {
+                    {                        
+                        // TODO: Make this more efficient
+                        var queueMessage = (await queueMessageService.GetAllAsync())
+                                            .Where(m => m.MessageQueueId == messageQueue.Id)
+                                            .Where(m => m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow)  // not expired
+                                            .OrderBy(m => m.CreatedDateTime).FirstOrDefault();
 
+                        response.QueueMessage = queueMessage;
                     }
 
                     // Send response
@@ -313,6 +332,36 @@ namespace CFMessageQueue.Hub
                 }
             });
         }
+
+        /// <summary>
+        /// Expires queue messages. Currently just deletes. Later then we made move them to an expired queue
+        /// </summary>
+        /// <returns></returns>
+        private Task ExpireQueueMessagesAsync(string messageQueueId)
+        {
+            return Task.Factory.StartNew(async () =>
+            {
+                _lastExpireQueueMessages = DateTimeOffset.UtcNow;
+
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    // Get services
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+
+                    // Get expired messages
+                    var queueMessages = await queueMessageService.GetExpired(messageQueueId, DateTimeOffset.UtcNow);
+
+                    // Handle expired messages
+                    while (queueMessages.Any())
+                    {
+                        var queueMessage = queueMessages.First();
+                        queueMessages.Remove(queueMessage);
+
+                        await queueMessageService.DeleteByIdAsync(queueMessage.Id);
+                    }
+                }
+            });
+        }        
 
         private MessageHubClient? GetMessageHubClientBySecurityKey(string securityKey, IMessageHubClientService messageHubClientService)
         {

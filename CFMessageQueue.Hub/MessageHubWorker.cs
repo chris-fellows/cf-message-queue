@@ -26,7 +26,7 @@ namespace CFMessageQueue.Hub
 
         private readonly System.Timers.Timer _timer;
 
-        private readonly QueueMessageHub _queueMessageHub;
+        private QueueMessageHub _queueMessageHub;
 
         private readonly List<QueueItemTask> _queueItemTasks = new List<QueueItemTask>();
 
@@ -147,6 +147,11 @@ namespace CFMessageQueue.Hub
                         _queueItemTasks.Add(new QueueItemTask(HandleConfigureMessageHubClientRequestAsync(configureMessageHubClientRequest, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
+                    case MessageTypeIds.ExecuteMessageQueueActionRequest:
+                        var executeMessageQueueActionRequest = _messageHubClientsConnection.MessageConverterList.ExecuteMessageQueueActionRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
+                        _queueItemTasks.Add(new QueueItemTask(HandleExecuteMessageQueueAction(executeMessageQueueActionRequest, queueItem.MessageReceivedInfo), queueItem));
+                        break;
+
                     case MessageTypeIds.GetMessageHubsRequest:
                         var getMessageHubsRequest = _messageHubClientsConnection.MessageConverterList.GetMessageHubsRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
                         _queueItemTasks.Add(new QueueItemTask(HandleGetMessageHubsRequestAsync(getMessageHubsRequest, queueItem.MessageReceivedInfo), queueItem));
@@ -250,20 +255,34 @@ namespace CFMessageQueue.Hub
 
                     if (messageHubClient == null)
                     {
+                        Console.WriteLine("HandleGetMessageQueued: No message hub client");
+
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
                     else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.GetMessageQueues))
                     {
+                        if (securityItem == null)
+                        {
+                            Console.WriteLine("HandleGetMessageQueued: No GetMessageQueues permission 100");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"HandleGetMessageQueued: No GetMessageQueues permission 200 {securityItem.MessageHubClientId}");
+                        }
+
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
                     else
                     {
+                        Console.WriteLine("HandleGetMessageQueued: Got message queues");
+
+                        // TODO: Consider filtering which queues are visible. Could check messageHubClient.SecurityItems
                         var messageQueues = await messageQueueService.GetAllAsync();
                         response.MessageQueues = messageQueues;
                     }
-
+                    
                     // Send response
                     _messageHubClientsConnection.SendGetMessageQueuesResponse(response, messageReceivedInfo);                    
                 }
@@ -321,9 +340,12 @@ namespace CFMessageQueue.Hub
                         var newMessageHubClient = new MessageHubClient()
                         {
                             Id = Guid.NewGuid().ToString(),
-                            SecurityKey = Guid.NewGuid().ToString()
+                            SecurityKey = addMessageHubClientRequest.ClientSecurityKey
                         };
                         await messageHubClientService.AddAsync(newMessageHubClient);
+
+                        // Update memory cache of message hub clients
+                        _messageHubClientsBySecurityKey.Add(newMessageHubClient.SecurityKey, messageHubClient);
 
                         // Add default permissions so that client can see message hubs & message queues. They will just be able to
                         // see the hubs & queues but not modify them
@@ -339,9 +361,11 @@ namespace CFMessageQueue.Hub
                         });
                         await queueMessageHubService.UpdateAsync(queueMessageHub);
 
-                        _queueMessageHub.SecurityItems = queueMessageHub.SecurityItems;
+                        _queueMessageHub = queueMessageHub;
 
                         response.MessageHubClientId = newMessageHubClient.Id;
+
+                        
                     }
 
                     // Send response
@@ -349,6 +373,119 @@ namespace CFMessageQueue.Hub
                 }
 
                 Console.WriteLine($"Processed {addMessageHubClientRequest.TypeId} for {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
+            });
+        }
+
+        /// <summary>
+        /// Handles request to execute action against message queue. E.g. Delete, clear etc.
+        /// </summary>
+        /// <param name="getMessageHubsRequest"></param>
+        /// <param name="messageReceivedInfo"></param>
+        /// <returns></returns>
+        private Task HandleExecuteMessageQueueAction(ExecuteMessageQueueActionRequest executeMessageQueueActionRequest, MessageReceivedInfo messageReceivedInfo)
+        {
+            return Task.Factory.StartNew(async () =>
+            {
+                Console.WriteLine($"Processing {executeMessageQueueActionRequest.TypeId}");
+
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var messageHubService = scope.ServiceProvider.GetRequiredService<IQueueMessageHubService>();
+                    var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
+                    var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageService>();
+                    var queueMessageHubService = scope.ServiceProvider.GetRequiredService<IQueueMessageHubService>();
+
+                    var response = new ExecuteMessageQueueActionResponse()
+                    {
+                        Response = new MessageResponse()
+                        {
+                            IsMore = false,
+                            MessageId = executeMessageQueueActionRequest.Id,
+                            Sequence = 1
+                        },
+                    };
+
+                    var messageHubClient = GetMessageHubClientBySecurityKey(executeMessageQueueActionRequest.SecurityKey, messageHubClientService);
+                    
+                    var securityItem = messageHubClient == null ? null : _queueMessageHub.SecurityItems.FirstOrDefault(si => si.MessageHubClientId == messageHubClient.Id);
+
+                    var messageQueue = await messageQueueService.GetByIdAsync(executeMessageQueueActionRequest.MessageQueueId);
+
+                    if (messageHubClient == null)
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                    }                    
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.Admin))
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                    }
+                    else if (messageQueue == null)
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue does not exist";
+                    }                    
+                    else
+                    {
+                        switch (executeMessageQueueActionRequest.ActionName)
+                        {
+                            case "CLEAR":
+                                Console.WriteLine($"Clearing queue {messageQueue.Name}");
+
+                                // Delete messages
+                                var queueMessages1 = (await queueMessageService.GetAllAsync())
+                                               .Where(m => m.MessageQueueId == messageQueue.Id).ToList();
+                                while (queueMessages1.Any())
+                                {
+                                    await queueMessageService.DeleteByIdAsync(queueMessages1.First().Id);
+                                    queueMessages1.RemoveAt(0);
+                                }
+
+                                Console.WriteLine($"Cleared queue {messageQueue.Name}");
+                                break;
+
+                            case "DELETE":
+                                Console.WriteLine($"Deleting queue {messageQueue.Name}");
+
+                                // Stop message queue worker
+                                var messageQueueWorker = _messageQueueWorkers.FirstOrDefault(w => w.MessageQueueId == messageQueue.Id);
+                                if (messageQueueWorker != null)
+                                {
+                                    Console.WriteLine($"Stopping queue worker for {messageQueue.Name} because queue is being deleted");
+
+                                    messageQueueWorker.Stop();
+                                    _messageQueueWorkers.Remove(messageQueueWorker);
+                                }
+
+                                // Delete messages
+                                var queueMessages2 = (await queueMessageService.GetAllAsync())
+                                            .Where(m => m.MessageQueueId == messageQueue.Id).ToList();
+                                while (queueMessages2.Any())
+                                {
+                                    await queueMessageService.DeleteByIdAsync(queueMessages2.First().Id);
+                                    queueMessages2.RemoveAt(0);
+                                }
+
+                                // Delete message queue
+                                await messageQueueService.DeleteByIdAsync(messageQueue.Id);
+
+                                Console.WriteLine($"Deleted queue {messageQueue.Name}");
+                                break;
+
+                            default:
+                                response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                                response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Action Name is invalid";
+                                break;
+                        }
+                    }
+                       
+                    // Send response
+                    _messageHubClientsConnection.SendExecuteMessageQueueActionResponse(response, messageReceivedInfo);
+                }
+
+                Console.WriteLine($"Processed {executeMessageQueueActionRequest.TypeId}");
             });
         }
 
@@ -429,6 +566,10 @@ namespace CFMessageQueue.Hub
                             {
                                 queueMessageHub.SecurityItems.Remove(securityItemEdit);
                             }
+
+                            await queueMessageHubService.UpdateAsync(queueMessageHub);
+
+                            _queueMessageHub = queueMessageHub;
                         }
                         else     // Message queue config
                         {
@@ -461,7 +602,9 @@ namespace CFMessageQueue.Hub
                                 {
                                     messageQueue.SecurityItems.Remove(securityItemEdit);
                                 }
-                            }
+
+                                await messageQueueService.UpdateAsync(messageQueue);
+                            }                            
                         }
                     }
 
@@ -572,13 +715,19 @@ namespace CFMessageQueue.Hub
             }
             if (!_messageHubClientsBySecurityKey.Any())   // Cache empty, load it
             {
-                var messageHubClients = messageHubClientService.GetAll();
-                foreach (var messageHubClient in messageHubClients)
-                {
-                    _messageHubClientsBySecurityKey.TryAdd(messageHubClient.SecurityKey, messageHubClient);
-                }                
+                RefreshMessageHubClients(messageHubClientService);
             }
             return _messageHubClientsBySecurityKey.ContainsKey(securityKey) ? _messageHubClientsBySecurityKey[securityKey] : null;
+        }
+
+        private void RefreshMessageHubClients(IMessageHubClientService messageHubClientService)
+        {
+            _messageHubClientsBySecurityKey.Clear();
+            var messageHubClients = messageHubClientService.GetAll();
+            foreach (var messageHubClient in messageHubClients)
+            {
+                _messageHubClientsBySecurityKey.TryAdd(messageHubClient.SecurityKey, messageHubClient);
+            }
         }
 
         private static string GetLocalIp()

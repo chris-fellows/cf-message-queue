@@ -9,6 +9,7 @@ namespace CFMessageQueue.Hub.Enums
     public enum QueueItemTypes
     {
         ArchiveLogs,
-        ConnectionMessage
+        ConnectionMessage,
+        ExpireQueueMessages
     }
 }

@@ -21,6 +21,9 @@ namespace CFMessageQueue
         private readonly IExternalMessageConverter<ConfigureMessageHubClientRequest> _configureMessageHubClientRequestConverter = new ConfigureMessageHubClientRequestConverter();
         private readonly IExternalMessageConverter<ConfigureMessageHubClientResponse> _configureMessageHubClientResponseConverter = new ConfigureMessageHubClientResponseConverter();
 
+        private readonly IExternalMessageConverter<ExecuteMessageQueueActionRequest> _executeMessageQueueActionRequestConverter = new ExecuteMessageQueueActionRequestConverter();
+        private readonly IExternalMessageConverter<ExecuteMessageQueueActionResponse> _executeMessageQueueActionResponseConverter = new ExecuteMessageQueueActionResponseConverter();
+
         private readonly IExternalMessageConverter<GetMessageHubsRequest> _getMessageHubsRequestConverter= new GetMessageHubsRequestConverter();
         private readonly IExternalMessageConverter<GetMessageHubsResponse> _getMessageHubsResponseConverter = new GetMessageHubsResponseConverter();
 
@@ -44,6 +47,9 @@ namespace CFMessageQueue
 
         public IExternalMessageConverter<ConfigureMessageHubClientRequest> ConfigureMessageHubClientRequestConverter => _configureMessageHubClientRequestConverter;
         public IExternalMessageConverter<ConfigureMessageHubClientResponse> ConfigureMessageHubClientResponseConverter => _configureMessageHubClientResponseConverter;
+
+        public IExternalMessageConverter<ExecuteMessageQueueActionRequest> ExecuteMessageQueueActionRequestConverter => _executeMessageQueueActionRequestConverter;
+        public IExternalMessageConverter<ExecuteMessageQueueActionResponse> ExecuteMessageQueueActionResponseConverter => _executeMessageQueueActionResponseConverter;
 
         public IExternalMessageConverter<GetMessageHubsRequest> GetMessageHubsRequestConverter => _getMessageHubsRequestConverter;
         public IExternalMessageConverter<GetMessageHubsResponse> GetMessageHubsResponseConverter => _getMessageHubsResponseConverter;

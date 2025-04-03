@@ -16,7 +16,7 @@ namespace CFMessageQueue.Hub
     /// <summary>
     /// Connection for clients for hub. Handles communications not relevant to specific queues. E.g. Get queue list.
     /// </summary>
-    public class MessageHubClientsConnection
+    public class MessageHubClientsConnection : IDisposable
     {
         private readonly ConnectionTcp _connection = new ConnectionTcp();
 
@@ -48,6 +48,18 @@ namespace CFMessageQueue.Hub
                     }
                 }
             };
+        }
+
+        public void Dispose()
+        {
+            if (_connection != null)
+            {
+                if (_connection.IsListening)
+                {
+                    _connection.StopListening();
+                }
+                _connection.Dispose();
+            }
         }
 
         public MessageConverterList MessageConverterList => _messageConverterList;
@@ -94,6 +106,11 @@ namespace CFMessageQueue.Hub
         public void SendConfigureMessageHubClientResponse(ConfigureMessageHubClientResponse configureMessageHubClientResponse, MessageReceivedInfo messageReceivedInfo)
         {
             _connection.SendMessage(_messageConverterList.ConfigureMessageHubClientResponseConverter.GetConnectionMessage(configureMessageHubClientResponse), messageReceivedInfo.RemoteEndpointInfo);
+        }
+
+        public void SendExecuteMessageQueueActionResponse(ExecuteMessageQueueActionResponse executeMessageQueueActionResponse, MessageReceivedInfo messageReceivedInfo)
+        {
+            _connection.SendMessage(_messageConverterList.ExecuteMessageQueueActionResponseConverter.GetConnectionMessage(executeMessageQueueActionResponse), messageReceivedInfo.RemoteEndpointInfo);
         }
     }
 }
