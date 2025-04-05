@@ -36,5 +36,7 @@ namespace CFMessageQueue.Constants
 
         public const string MessageQueueSubscribeRequest = "MessageQueueSubscribeRequest";
         public const string MessageQueueSubscribeResponse = "MessageQueueSubscribeResponse";
+
+        public const string QueueMessageProcessedMessage = "QueueMessageProcessedMessage";
     }
 }

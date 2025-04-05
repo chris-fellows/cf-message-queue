@@ -13,19 +13,21 @@ using System.Xml.Linq;
 
 namespace CFMessageQueue.Services
 {
+    /// <summary>
+    /// Message hub client connector. Communicates with hub worker.
+    /// </summary>
     public class MessageHubClientConnector : IMessageHubClientConnector, IDisposable
     {
         private readonly MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
+        private readonly string _clientSessionId = Guid.NewGuid().ToString();
         private readonly EndpointInfo _remoteEndpointInfo;
-        private readonly string _adminSecurityKey;
-        private readonly string _defaultSecurityKey;
+        private readonly string _securityKey;        
 
-        public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string adminSecurityKey, string defaultSecurityKey, int localPort)
+        public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string securityKey, int localPort)
         {            
             _remoteEndpointInfo = remoteEndpointInfo;
-            _adminSecurityKey = adminSecurityKey;
-            _defaultSecurityKey = defaultSecurityKey;
+            _securityKey = securityKey;
 
             _messageHubConnection.StartListening(localPort);
         }
@@ -35,14 +37,58 @@ namespace CFMessageQueue.Services
             _messageHubConnection.Dispose();
         }
 
-        public Task ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
+        public string CreateRandomSecurityKey()
         {
+            return Guid.NewGuid().ToString();
+        }
+
+        public Task ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes)
+        {            
+            if (String.IsNullOrEmpty(messageHubClientId))
+            {
+                throw new ArgumentNullException(nameof(messageHubClientId));
+            }
+
             var configureMessageHubClientRequest = new ConfigureMessageHubClientRequest()
             {
-                SecurityKey = _adminSecurityKey,
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
+                MessageHubClientId = messageHubClientId,
+                MessageQueueId = "",
+                RoleTypes = roleTypes     // Will return error if they specify non-hub roles
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendConfigureMessageHubClientRequest(configureMessageHubClientRequest, _remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error configuring message hub client", messageConnectionException);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
+        {
+            if (String.IsNullOrEmpty(messageHubClientId))
+            {
+                throw new ArgumentNullException(nameof(messageHubClientId));
+            }
+            if (String.IsNullOrEmpty(messageQueueId))
+            {
+                throw new ArgumentNullException(nameof(messageQueueId));
+            }
+
+            var configureMessageHubClientRequest = new ConfigureMessageHubClientRequest()
+            {
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 MessageHubClientId = messageHubClientId,
                 MessageQueueId = messageQueueId,
-                RoleTypes = roleTypes
+                RoleTypes = roleTypes       // Will return error if they specify non-queue roles
             };
 
             try
@@ -58,12 +104,28 @@ namespace CFMessageQueue.Services
             return Task.CompletedTask;
         }
 
-        public Task<string> AddMessageQueueAsync(string name)
+        public Task<string> AddMessageQueueAsync(string name, int maxConcurrentProcessing, int maxSize)
         {
+            if (String.IsNullOrEmpty(name))
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
+            if (maxConcurrentProcessing < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxConcurrentProcessing), "Max Concurrent Processing must be zero or more");
+            }
+            if (maxSize < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxSize), "Max Size must be zero or more");
+            }
+
             var addMessageQueueRequest = new AddMessageQueueRequest()
             {
-                SecurityKey = _adminSecurityKey,
-                MessageQueueName = name
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
+                MessageQueueName = name,
+                MaxConcurrentProcessing = maxConcurrentProcessing,
+                MaxSize = maxSize
             };
 
             try
@@ -81,9 +143,15 @@ namespace CFMessageQueue.Services
 
         public Task DeleteMessageQueueAsync(string messageQueueId)
         {
+            if (String.IsNullOrEmpty(messageQueueId))
+            {
+                throw new ArgumentNullException(nameof(messageQueueId));
+            }
+
             var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
             {
-                SecurityKey = _adminSecurityKey,
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 MessageQueueId = messageQueueId,
                 ActionName = "DELETE"
             };
@@ -103,9 +171,15 @@ namespace CFMessageQueue.Services
 
         public Task ClearMessageQueueAsync(string messageQueueId)
         {
+            if (String.IsNullOrEmpty(messageQueueId))
+            {
+                throw new ArgumentNullException(nameof(messageQueueId));
+            }
+
             var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
             {
-                SecurityKey = _adminSecurityKey,
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 MessageQueueId = messageQueueId,
                 ActionName = "CLEAR"
             };
@@ -125,9 +199,15 @@ namespace CFMessageQueue.Services
 
         public Task<string> AddMessageHubClientAsync(string securityKey)
         {
+            if (String.IsNullOrEmpty(securityKey))
+            {
+                throw new ArgumentNullException(nameof(securityKey));
+            }
+
             var addMessageHubClientRequest = new AddMessageHubClientRequest()
             {
-                SecurityKey = _adminSecurityKey,
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 ClientSecurityKey = securityKey
             };
 
@@ -148,7 +228,8 @@ namespace CFMessageQueue.Services
         {
             var getMessageHubsRequest = new GetMessageHubsRequest()
             {
-                SecurityKey = _defaultSecurityKey
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
             };
 
             try
@@ -181,7 +262,8 @@ namespace CFMessageQueue.Services
         {
             var getMessageQueuesRequest = new GetMessageQueuesRequest()
             {
-                SecurityKey = _defaultSecurityKey
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
             };
 
             try

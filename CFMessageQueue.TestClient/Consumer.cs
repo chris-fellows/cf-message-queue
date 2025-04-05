@@ -1,6 +1,7 @@
 ﻿using CFMessageQueue.Services;
 using CFMessageQueue.TestClient.Extensions;
 using CFMessageQueue.TestClient.Models;
+using CFMessageQueue.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -44,25 +45,32 @@ namespace CFMessageQueue.TestClient
 
         public void Run()
         {
+            Console.Write("Consumer has started");
+
             var cancellationToken = _cancellationTokenSource.Token;
 
+            var usedPorts= new List<int>();
+
+            var hubClientLocalPort = NetworkUtilities.GetFreeLocalPort(SystemConfig.MinClientLocalPort, SystemConfig.MaxClientLocalPort, usedPorts);
+            usedPorts.Add(hubClientLocalPort);
             var messageHubClientConnector = new MessageHubClientConnector(_consumerConfig.HubEndpointInfo,
-                                     _consumerConfig.AdminSecurityKey,
-                                     _consumerConfig.DefaultSecurityKey,
-                                     _consumerConfig.LocalPort);
+                                     _consumerConfig.DefaultSecurityKey, hubClientLocalPort);                                     
 
             // Get message queue Id from name
             var messageQueues = messageHubClientConnector.GetMessageQueuesAsync().Result;
             var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == _consumerConfig.MessageQueueName);
 
             // Create message queue client
-            var messageQueueClientConnector = new MessageQueueClientConnector(_consumerConfig.DefaultSecurityKey, _consumerConfig.LocalPort);
+            var queueClientLocalPort = NetworkUtilities.GetFreeLocalPort(SystemConfig.MinClientLocalPort, SystemConfig.MaxClientLocalPort, usedPorts);
+            usedPorts.Add(queueClientLocalPort);
+            var messageQueueClientConnector = new MessageQueueClientConnector(_consumerConfig.DefaultSecurityKey, queueClientLocalPort);
+            
             messageQueueClientConnector.SetMessageQueue(messageQueue);
-
-            var stopwatch = new Stopwatch();
+            
+            // Run until canceller
             while (!cancellationToken.IsCancellationRequested)
             {
-                var queueMessage = messageQueueClientConnector.GetNextAsync().Result;
+                var queueMessage = messageQueueClientConnector.GetNextAsync(TimeSpan.Zero).Result;
 
                 if (queueMessage == null)
                 {
@@ -71,11 +79,18 @@ namespace CFMessageQueue.TestClient
                 else
                 {
                     Console.WriteLine($"Processing message {queueMessage.Id} from queue {messageQueue.Name}");
+
+                    Console.WriteLine($"Setting message {queueMessage.Id} as processed");
+                    messageQueueClientConnector.SetProcessed(queueMessage.Id, true).Wait();
+                    Console.WriteLine($"Set message {queueMessage.Id} as processed");
                 }
 
                 // Delay before next get
+                var stopwatch = new Stopwatch();
                 stopwatch.Wait(_consumerConfig.DelayBetweenGetMessage, cancellationToken);
             }
+
+            Console.WriteLine("Producer has completed");
         }
     }
 }

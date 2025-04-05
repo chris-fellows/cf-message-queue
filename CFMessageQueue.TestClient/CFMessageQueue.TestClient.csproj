@@ -13,8 +13,4 @@
     <ProjectReference Include="..\CFMessageQueue.Common\CFMessageQueue.Common.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="NewFolder\" />
-  </ItemGroup>
-
 </Project>

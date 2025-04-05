@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CFMessageQueue.Enums;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,6 +33,20 @@ namespace CFMessageQueue.Models
         /// Created time
         /// </summary>
         public DateTimeOffset CreatedDateTime { get; set; }
+
+        /// <summary>
+        /// Status
+        /// </summary>
+        public QueueMessageStatuses Status { get; set; }
+
+        /// <summary>
+        /// Processing message hub client
+        /// </summary>
+        public string ProcessingMessageHubClientId { get; set; } = String.Empty;
+
+        public int MaxProcessingMilliseconds { get; set; }
+
+        public DateTimeOffset ProcessingStartDateTime { get; set; }
 
         /// <summary>
         /// Expiry time (Seconds)

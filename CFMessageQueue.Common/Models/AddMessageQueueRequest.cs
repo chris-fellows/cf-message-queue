@@ -11,6 +11,10 @@ namespace CFMessageQueue.Models
     {
         public string MessageQueueName { get; set; } = String.Empty;
 
+        public int MaxConcurrentProcessing { get; set; }
+
+        public int MaxSize { get; set; }
+
         public AddMessageQueueRequest()
         {
             Id = Guid.NewGuid().ToString();

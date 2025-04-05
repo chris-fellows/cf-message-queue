@@ -9,11 +9,19 @@ namespace CFMessageQueue.Hub.Models
         /// </summary>
         public int LocalPort { get; set; }
 
-
+        /// <summary>
+        /// Min port for new queues
+        /// </summary>
         public int MinQueuePort { get; set; }
 
+        /// <summary>
+        /// Max port for new queues
+        /// </summary>
         public int MaxQueuePort { get; set; }
 
+        /// <summary>
+        /// Max days to keep log
+        /// </summary>
         public int MaxLogDays { get; set; }
 
         public string LogFolder { get; set; } = String.Empty;

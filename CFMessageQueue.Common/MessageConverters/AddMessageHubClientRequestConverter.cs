@@ -29,21 +29,13 @@ namespace CFMessageQueue.MessageConverters
                     {
                         Name = "ClientSecurityKey",
                         Value = externalMessage.ClientSecurityKey
+                    },
+                        new ConnectionMessageParameter()
+                    {
+                        Name = "ClientSessionId",
+                        Value = externalMessage.ClientSessionId
                     }
-                   // new ConnectionMessageParameter()
-                   //{
-                   //    Name = "MessageQueue",
-                   //    Value = externalMessage.MessageQueue == null ? "" :
-                   //                     JsonUtilities.SerializeToBase64String(externalMessage.MessageQueue,
-                   //                     JsonUtilities.DefaultJsonSerializerOptions)
-                   //},
-                   //new ConnectionMessageParameter()
-                   //{
-                   //    Name = "QueueMessage",
-                   //    Value = externalMessage.QueueMessage == null ? "" :
-                   //                     JsonUtilities.SerializeToBase64String(externalMessage.QueueMessage,
-                   //                     JsonUtilities.DefaultJsonSerializerOptions)
-                   //}
+
                 }
             };
             return connectionMessage;
@@ -55,7 +47,8 @@ namespace CFMessageQueue.MessageConverters
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
-                ClientSecurityKey = connectionMessage.Parameters.First(p => p.Name == "ClientSecurityKey").Value
+                ClientSecurityKey = connectionMessage.Parameters.First(p => p.Name == "ClientSecurityKey").Value,
+                ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value
             };
 
             //// Get message queue

@@ -20,21 +20,32 @@ namespace CFMessageQueue.TestClient.Models
         /// </summary>
         public static string AdminSecurityKey { get; set; } = "5005db05-35eb-4471-bd05-7883b746b196";
 
-        /// <summary>
-        /// Default hub security key. E.g. Get queues
-        /// </summary>
-        public static string DefaultHubSecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
+        ///// <summary>
+        ///// Default hub security key. E.g. Get queues
+        ///// </summary>
+        //public static string DefaultHubSecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
-        public static string QueueName1 { get; set; } = "Queue 1";
+        public static string Queue1Name { get; set; } = "Queue 1";
 
-        /// <summary>
-        /// Local port for hub communications
-        /// </summary>
-        public static int HubClientLocalPort { get; set; } = 10100;
+        public static string Queue2Name { get; set; } = "Queue 2";
 
-        /// <summary>
-        /// Local port for queue specific communications
-        /// </summary>
-        public static int QueueLocalPort { get; set; } = 10101;
+        ///// <summary>
+        ///// Local port for hub communications
+        ///// </summary>
+        //public static int HubClientLocalPort { get; set; } = 10100;
+
+        ///// <summary>
+        ///// Local port for queue specific communications (Queue 1)
+        ///// </summary>
+        //public static int Queue1LocalPort { get; set; } = 10101;
+
+        ///// <summary>
+        ///// Local port for queue specific communications (Queue 2)
+        ///// </summary>
+        //public static int Queue2LocalPort { get; set; } = 10102;
+
+        public static int MinClientLocalPort { get; set; } = 10001;
+
+        public static int MaxClientLocalPort { get; set; } = 10050;
     }
 }

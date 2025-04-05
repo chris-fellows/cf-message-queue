@@ -25,6 +25,11 @@ namespace CFMessageQueue.MessageConverters
                         Name = "SecurityKey",
                         Value = externalMessage.SecurityKey
                     },
+                           new ConnectionMessageParameter()
+  {
+      Name = "ClientSessionId",
+      Value = externalMessage.ClientSessionId
+  }
                     //  new ConnectionMessageParameter()
                     //{
                     //    Name = "SenderAgentId",
@@ -41,6 +46,7 @@ namespace CFMessageQueue.MessageConverters
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
+                ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value
                 //SenderAgentId = connectionMessage.Parameters.First(p => p.Name == "SenderAgentId").Value
             };
 

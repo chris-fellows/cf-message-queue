@@ -25,6 +25,11 @@ namespace CFMessageQueue.MessageConverters
                         Name = "SecurityKey",
                         Value = externalMessage.SecurityKey
                     },
+                           new ConnectionMessageParameter()
+                      {
+                          Name = "ClientSessionId",
+                          Value = externalMessage.ClientSessionId
+                      },
                       new ConnectionMessageParameter()
                     {
                         Name = "MessageHubClientId",
@@ -65,7 +70,8 @@ namespace CFMessageQueue.MessageConverters
             var externalMessage = new ConfigureMessageHubClientRequest()
             {
                 Id = connectionMessage.Id,
-                SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,                
+                SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
+                ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value,
                 MessageHubClientId  = connectionMessage.Parameters.First(p => p.Name == "MessageHubClientId").Value,
                 MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value,
                 RoleTypes = new()

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CFMessageQueue.Models
+﻿namespace CFMessageQueue.Models
 {
     public class MessageQueue
     {
@@ -15,6 +9,14 @@ namespace CFMessageQueue.Models
         public string Ip { get; set; } = String.Empty;
 
         public int Port { get; set; }
+
+        /// <summary>
+        /// Max concurrent messages that can be processed. If 1 then it ensures that messages must be processed
+        /// in receive order
+        /// </summary>
+        public int MaxConcurrentProcessing { get; set; }   
+        
+        public int MaxSize { get; set; }
 
         public List<SecurityItem> SecurityItems { get; set; } = new();
     }

@@ -18,19 +18,27 @@ namespace CFMessageQueue.Interfaces
         Task SendAsync(QueueMessage message);
 
         /// <summary>
-        /// Gets next message from queue
+        /// Gets next message from queue. If no message then can wait until the max wait if set
         /// </summary>
-        /// <param name="messageQueue"></param>
+        /// <param name="maxWait">Max time to wait for message: 0=Don't wait</param>
         /// <returns></returns>
-        Task<QueueMessage?> GetNextAsync();
+        Task<QueueMessage?> GetNextAsync(TimeSpan maxWait);
 
         /// <summary>
-        /// Subscribe for notifications from queue. E.g. Message(s) added
+        /// Sets message as processed
         /// </summary>
-        /// <param name="notificationAction">Action to take< (Parameter=Event name)</param>        
+        /// <param name="queueMessageId"></param>
+        /// <param name="processed"></param>
+        /// <returns></returns>
+        Task SetProcessed(string queueMessageId, bool processed);
+
+        /// <summary>
+        /// Subscribe for notifications from queue. E.g. Message(s) added, queue size etc.        
+        /// </summary>
+        /// <param name="notificationAction">Action to take< (Parameters=Event name, Queue Size [nullable])</param>        
         /// <param name="queueSizeNotificationFrequency">Frequency to notify of queue size (Zero=Never)</param>
         /// <returns></returns>
-        Task<string> SubscribeAsync(Action<string> notificationAction, TimeSpan queueSizeNotificationFrequency);
+        Task<string> SubscribeAsync(Action<string, long?> notificationAction, TimeSpan queueSizeNotificationFrequency);
 
         /// <summary>
         /// Unsubscribe from notifications from queue

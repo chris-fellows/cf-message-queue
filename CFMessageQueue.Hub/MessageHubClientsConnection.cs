@@ -83,34 +83,34 @@ namespace CFMessageQueue.Hub
             return false;
         }
 
-        public void SendGetMessageHubsResponse(GetMessageHubsResponse getMessageHubsResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendGetMessageHubsResponse(GetMessageHubsResponse getMessageHubsResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.GetMessageHubsResponseConverter.GetConnectionMessage(getMessageHubsResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetMessageHubsResponseConverter.GetConnectionMessage(getMessageHubsResponse), remoteEndpointInfo);
         }
 
-        public void SendGetMessageQueuesResponse(GetMessageQueuesResponse getMessageQueuesResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendGetMessageQueuesResponse(GetMessageQueuesResponse getMessageQueuesResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.GetMessageQueuesResponseConverter.GetConnectionMessage(getMessageQueuesResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetMessageQueuesResponseConverter.GetConnectionMessage(getMessageQueuesResponse), remoteEndpointInfo);
         }
 
-        public void SendAddMessageHubClientResponse(AddMessageHubClientResponse addMessageHubClientResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendAddMessageHubClientResponse(AddMessageHubClientResponse addMessageHubClientResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.AddMessageHubClientResponseConverter.GetConnectionMessage(addMessageHubClientResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.AddMessageHubClientResponseConverter.GetConnectionMessage(addMessageHubClientResponse), remoteEndpointInfo);
         }
 
-        public void SendAddMessageQueueResponse(AddMessageQueueResponse addMessageQueueResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendAddMessageQueueResponse(AddMessageQueueResponse addMessageQueueResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.AddMessageQueueResponseConverter.GetConnectionMessage(addMessageQueueResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.AddMessageQueueResponseConverter.GetConnectionMessage(addMessageQueueResponse), remoteEndpointInfo);
         }
 
-        public void SendConfigureMessageHubClientResponse(ConfigureMessageHubClientResponse configureMessageHubClientResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendConfigureMessageHubClientResponse(ConfigureMessageHubClientResponse configureMessageHubClientResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.ConfigureMessageHubClientResponseConverter.GetConnectionMessage(configureMessageHubClientResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.ConfigureMessageHubClientResponseConverter.GetConnectionMessage(configureMessageHubClientResponse), remoteEndpointInfo);
         }
 
-        public void SendExecuteMessageQueueActionResponse(ExecuteMessageQueueActionResponse executeMessageQueueActionResponse, MessageReceivedInfo messageReceivedInfo)
+        public void SendExecuteMessageQueueActionResponse(ExecuteMessageQueueActionResponse executeMessageQueueActionResponse, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.ExecuteMessageQueueActionResponseConverter.GetConnectionMessage(executeMessageQueueActionResponse), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.ExecuteMessageQueueActionResponseConverter.GetConnectionMessage(executeMessageQueueActionResponse), remoteEndpointInfo);
         }
     }
 }

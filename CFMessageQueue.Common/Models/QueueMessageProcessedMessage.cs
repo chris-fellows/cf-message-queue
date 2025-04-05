@@ -7,18 +7,20 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.Models
 {
-    public class GetNextQueueMessageRequest : MessageBase
+    public class QueueMessageProcessedMessage : MessageBase
     {
+
         public string MessageQueueId { get; set; } = String.Empty;
 
-        public int MaxWaitMilliseconds { get; set; }
+        public string QueueMessageId { get; set; } = String.Empty;
 
-        public int MaxProcessingMilliseconds { get; set; }
+        public bool Processed { get; set; }
 
-        public GetNextQueueMessageRequest()
+
+        public QueueMessageProcessedMessage()
         {
             Id = Guid.NewGuid().ToString();
-            TypeId = MessageTypeIds.GetNextQueueMessageRequest;
+            TypeId = MessageTypeIds.QueueMessageProcessedMessage;
         }
     }
 }

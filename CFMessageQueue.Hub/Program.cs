@@ -1,16 +1,12 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Net;
-using System.Runtime.Loader;
-using CFMessageQueue.Enums;
 using CFMessageQueue.Hub.Models;
 using CFMessageQueue.Hub;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Services;
 using CFMessageQueue.Logs;
-using CFMessageQueue.Models;
-using CFMessageQueue.Common;
+using CFMessageQueue.Utilities;
 
 internal static class Program
 {
@@ -18,122 +14,26 @@ internal static class Program
     {
         Console.WriteLine($"Starting CF Message Queue Hub ({NetworkUtilities.GetLocalIPV4Addresses()[0]})");
 
+        // Get system config
         var systemConfig = GetSystemConfig();
 
+        // Get service provider
         var serviceProvider = CreateServiceProvider();
 
-        // Get services
-        var messageHubClientService = serviceProvider.GetRequiredService<IMessageHubClientService>();
-        var messageQueueService = serviceProvider.GetRequiredService<IMessageQueueService>();
-        var queueMessageHubService = serviceProvider.GetRequiredService<IQueueMessageHubService>();
+        // Create message queue hub
+        var messageQueueHub = new MessageQueueHub(serviceProvider, systemConfig);
 
-        //const string adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
-        //const string defaultSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";
-
-        // Get message hub clients (if any), create default admin client if required
-        var messageHubClients = messageHubClientService.GetAllAsync().Result;
-        if (!messageHubClients.Any())       // Create default admin client
-        {
-            // Add admin client
-            var messageHubClient = new MessageHubClient()
-            {
-                Id = Guid.NewGuid().ToString(),
-                SecurityKey = systemConfig.AdminSecurityKey                
-            };
-            messageHubClientService.AddAsync(messageHubClient).Wait();
-            messageHubClients.Add(messageHubClient);
-        }
-        var adminMessageHubClient = messageHubClients.First(c => c.SecurityKey == systemConfig.AdminSecurityKey);
-
-        // Check for queue message hubs. Should just be one entity as we only know about this hub
-        var queueMessageHubs = queueMessageHubService.GetAllAsync().Result;
-        if (!queueMessageHubs.Any())   // Create default queue message hub
-        {
-            var queueMessageHub = GetDefaultQueueMessageHub(systemConfig, adminMessageHubClient);
-            queueMessageHubService.AddAsync(queueMessageHub).Wait();
-            queueMessageHubs.Add(queueMessageHub);
-        }        
-
-        // Create message queue worker for each message queue
-        var messageQueues = messageQueueService.GetAllAsync().Result;       
-        var messageQueueWorkers = new List<MessageQueueWorker>();        
-        foreach(var messageQueue in messageQueues)
-        {
-            messageQueueWorkers.Add(new MessageQueueWorker(messageQueue, serviceProvider));
-        }
-
-        // Start hub worker
-        var messageHubWorker = new MessageHubWorker(queueMessageHubs.First(), serviceProvider, messageQueueWorkers, systemConfig);
-        messageHubWorker.Start();
-
-        // Start queue workers
-        messageQueueWorkers.ForEach(worker => worker.Start());
-
-        // Wait for requrest to stop            
-        if (IsInDockerContainer)
-        {
-            bool active = true;
-            //AssemblyLoadContext.Default.Unloading += delegate (AssemblyLoadContext context)
-            //{
-            //    Console.WriteLine("Stopping worker due to terminating");
-            //    messageQueueWorkers.ForEach(worker => worker.Stop());
-            //    Console.WriteLine("Stopped worker");
-            //    active = false;
-            //};
-
-            while (active)
-            {
-                Thread.Sleep(100);
-                Thread.Yield();
-            }
-        }
-        else
-        {
-            do
-            {
-                Console.WriteLine("Press ESCAPE to stop");  // Also displayed if user presses other key
-                while (!Console.KeyAvailable)
-                {
-                    Thread.Sleep(100);
-                    Thread.Yield();
-                }
-            } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
-
-            // Stop hub worker
-            messageHubWorker.Stop();
-
-            // Stop queue workers
-            messageQueueWorkers.ForEach(worker => worker.Stop());
-        }
+        // Message hub until shutdown requested
+        var cancellationTokenSource = new CancellationTokenSource();
+        messageQueueHub.Run(cancellationTokenSource.Token);
 
         Console.WriteLine("Terminated Starting CF Message Queue Hub");
     }
 
-    private static QueueMessageHub GetDefaultQueueMessageHub(SystemConfig systemConfig, MessageHubClient adminMessageHubClient)
-    {
-        var queueMessageHub = new QueueMessageHub()
-        {
-            Id = Guid.NewGuid().ToString(),
-            Ip = NetworkUtilities.GetLocalIPV4Addresses().First(),
-            Port = systemConfig.LocalPort,
-            SecurityItems = new List<SecurityItem>()
-                {
-                    // Add default security item for managing admin functions
-                    new SecurityItem()
-                    {
-                        MessageHubClientId = adminMessageHubClient.Id,
-                        RoleTypes = new List<RoleTypes>()
-                        {
-                            RoleTypes.Admin,
-                            RoleTypes.GetMessageHubs,
-                            RoleTypes.GetMessageQueues
-                        }
-                    }
-                }
-        };
-
-        return queueMessageHub;
-    }
+    //private static bool IsInDockerContainer
+    //{
+    //    get { return Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"; }
+    //}
 
     private static SystemConfig GetSystemConfig()
     {            
@@ -147,12 +47,7 @@ internal static class Program
             AdminSecurityKey = System.Configuration.ConfigurationManager.AppSettings["AdminSecurityKey"].ToString()
         };
     }
-
-    private static bool IsInDockerContainer
-    {
-        get { return Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"; }
-    }
-
+   
     private static IServiceProvider CreateServiceProvider()
     {
         var configFolder = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "Config");
@@ -170,10 +65,10 @@ internal static class Program
              {
                  return new XmlMessageQueueService(Path.Combine(configFolder, "MessageQueue"));
              })
-             .AddScoped<IMessageQueueSubscriptionService>((scope) =>
-             {
-                 return new XmlMessageQueueSubscriptionService(Path.Combine(configFolder, "MessageQueueSubscription"));
-             })
+             //.AddScoped<IMessageQueueSubscriptionService>((scope) =>
+             //{
+             //    return new XmlMessageQueueSubscriptionService(Path.Combine(configFolder, "MessageQueueSubscription"));
+             //})
              .AddScoped<IQueueMessageInternalService>((scope) =>
              {
                 return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessageInternal"));

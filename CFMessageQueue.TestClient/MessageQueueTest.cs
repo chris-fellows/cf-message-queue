@@ -9,7 +9,7 @@ namespace CFMessageQueue.TestClient
         {
             using (var messageQueueClientConnector = new MessageQueueClientConnector(securityKey, localPort))
             {
-                var contentSerializer = new QueueMessageContentSerializer();
+                //var contentSerializer = new QueueMessageContentSerializer();
 
                 messageQueueClientConnector.SetMessageQueue(messageQueue);
 
@@ -45,7 +45,7 @@ namespace CFMessageQueue.TestClient
 
                 messageQueueClientConnector.SetMessageQueue(messageQueue);
 
-                var queueMessage = await messageQueueClientConnector.GetNextAsync();
+                var queueMessage = await messageQueueClientConnector.GetNextAsync(TimeSpan.Zero);
 
                 //if (queueMessage != null)
                 //{                    

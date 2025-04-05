@@ -86,19 +86,24 @@ namespace CFMessageQueue.Hub
             return false;
         }
 
-        public void SendAddQueueMessageResponse(AddQueueMessageResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendAddQueueMessageResponse(AddQueueMessageResponse response, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.AddQueueMessageResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.AddQueueMessageResponseConverter.GetConnectionMessage(response), remoteEndpointInfo);
         }
 
-        public void SendGetNextQueueMessageResponse(GetNextQueueMessageResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendGetNextQueueMessageResponse(GetNextQueueMessageResponse response, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.GetNextQueueMessageResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.GetNextQueueMessageResponseConverter.GetConnectionMessage(response), remoteEndpointInfo);
         }
 
-        public void SendMessageQueueSubscribeResponse(MessageQueueSubscribeResponse response, MessageReceivedInfo messageReceivedInfo)
+        public void SendMessageQueueSubscribeResponse(MessageQueueSubscribeResponse response, EndpointInfo remoteEndpointInfo)
         {
-            _connection.SendMessage(_messageConverterList.MessageQueueSubscribeResponseConverter.GetConnectionMessage(response), messageReceivedInfo.RemoteEndpointInfo);
+            _connection.SendMessage(_messageConverterList.MessageQueueSubscribeResponseConverter.GetConnectionMessage(response), remoteEndpointInfo);
+        }
+
+        public void SendMessageQueueNotificationMessage(MessageQueueNotificationMessage message, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.MessageQueueNotificationMessageConverter.GetConnectionMessage(message), remoteEndpointInfo);
         }
     }
 }

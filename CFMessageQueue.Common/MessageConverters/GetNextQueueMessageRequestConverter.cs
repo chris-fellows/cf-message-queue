@@ -25,16 +25,26 @@ namespace CFMessageQueue.MessageConverters
                         Name = "SecurityKey",
                         Value = externalMessage.SecurityKey
                     },
-                    //  new ConnectionMessageParameter()
-                    //{
-                    //    Name = "SenderAgentId",
-                    //    Value = externalMessage.SenderAgentId
-                    //}
+                         new ConnectionMessageParameter()
+  {
+      Name = "ClientSessionId",
+      Value = externalMessage.ClientSessionId
+  },
                     new ConnectionMessageParameter()
                    {
                        Name = "MessageQueueId",
                        Value = externalMessage.MessageQueueId
-                   },                  
+                   },
+                      new ConnectionMessageParameter()
+                   {
+                       Name = "MaxWaitMilliseconds",
+                       Value = externalMessage.MaxWaitMilliseconds.ToString()
+                   },
+                          new ConnectionMessageParameter()
+                   {
+                       Name = "MaxProcessingMilliseconds",
+                       Value = externalMessage.MaxProcessingMilliseconds.ToString()
+                   },
                 }
             };
             return connectionMessage;
@@ -46,7 +56,10 @@ namespace CFMessageQueue.MessageConverters
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
-                MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value
+                ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value,
+                MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value,
+                MaxWaitMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxWaitMilliseconds").Value),
+                MaxProcessingMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxProcessingMilliseconds").Value)
             };   
 
             return externalMessage;

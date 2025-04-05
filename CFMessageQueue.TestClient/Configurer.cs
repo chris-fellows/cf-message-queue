@@ -15,13 +15,13 @@ namespace CFMessageQueue.TestClient
 {
     internal class Configurer
     {
-        public async Task<string> CreateMessageQueueAsync(EndpointInfo hubEndpointInfo, string name, int localPort)
+        public async Task<string> CreateMessageQueueAsync(EndpointInfo hubEndpointInfo, string name, int maxConcurrentProcessing, int maxSize, int localPort)
         {            
-            using (var messageHubClientConnector = new MessageHubClientConnector(hubEndpointInfo, SystemConfig.AdminSecurityKey, "", localPort))
+            using (var messageHubClientConnector = new MessageHubClientConnector(hubEndpointInfo, SystemConfig.AdminSecurityKey, localPort))
             {
 
                 // Create message queue (Gives full permissions to admin hub client)
-                var messageQueueId = await messageHubClientConnector.AddMessageQueueAsync(name);
+                var messageQueueId = await messageHubClientConnector.AddMessageQueueAsync(name, maxConcurrentProcessing, maxSize);
 
                 return messageQueueId;
             }
@@ -41,7 +41,7 @@ namespace CFMessageQueue.TestClient
                 Port = 10000
             };
             */
-            using (var messageHubClientConnector = new MessageHubClientConnector(hubEndpointInfo, SystemConfig.AdminSecurityKey, "", localPort))
+            using (var messageHubClientConnector = new MessageHubClientConnector(hubEndpointInfo, SystemConfig.AdminSecurityKey, localPort))
             {
                 // Create message queue (Gives full permissions to admin hub client)
                 //var messageQueueId = messageHubClientConnector.AddMessageQueueAsync(SystemConfig.QueueName1).Result;

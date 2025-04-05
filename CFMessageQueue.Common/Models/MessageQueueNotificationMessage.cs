@@ -14,7 +14,7 @@ namespace CFMessageQueue.Models
     {
         public string EventName { get; set; } = String.Empty;
 
-        public long QueueSize { get; set; }
+        public long? QueueSize { get; set; }
 
         public MessageQueueNotificationMessage()
         {

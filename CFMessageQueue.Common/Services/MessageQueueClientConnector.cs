@@ -3,26 +3,24 @@ using CFMessageQueue.Constants;
 using CFMessageQueue.Exceptions;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Metadata.Ecma335;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CFMessageQueue.Services
 {
+    /// <summary>
+    /// Message queue client connector. Communicates with queue worker for specific queue.
+    /// </summary>
     public class MessageQueueClientConnector : IMessageQueueClientConnector, IDisposable
     {
         private MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
         private MessageQueue? _messageQueue;
 
+        private readonly string _clientSessionId = Guid.NewGuid().ToString();
         private readonly string _securityKey;
 
         private int _localPort;
 
-        private Action<string>? _notificationAction;
+        private Action<string, long?>? _notificationAction;      // Params: Event Name, Queue Size
 
         public MessageQueueClientConnector(string securityKey, int localPort)
         {
@@ -44,14 +42,14 @@ namespace CFMessageQueue.Services
             _messageHubConnection = new MessageHubConnection();
             _messageHubConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
             {
-                // If notification then forward
+                // If notification then forward it
                 if (connectionMessage.TypeId == MessageTypeIds.MessageQueueNotification &&
                     _notificationAction != null)
                 {
-                    var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationConverter.GetExternalMessage(connectionMessage);
+                    var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationMessageConverter.GetExternalMessage(connectionMessage);
 
                     // Notify
-                    Task.Factory.StartNew(() => _notificationAction(notification.EventName));
+                    Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));
                 }
             };
           
@@ -107,9 +105,15 @@ namespace CFMessageQueue.Services
 
         public async Task SendAsync(QueueMessage queueMessage)
         {
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+
             var addQueueMessageRequest = new AddQueueMessageRequest()
             {
                 SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 QueueMessage = GetQueueMessageInternal(queueMessage),
                 MessageQueueId = _messageQueue.Id                
             };
@@ -131,12 +135,19 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public async Task<QueueMessage?> GetNextAsync()
+        public async Task<QueueMessage?> GetNextAsync(TimeSpan maxWait)
         {
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+
             var getNextQueueMessageRequest = new GetNextQueueMessageRequest()
             {
                 SecurityKey = _securityKey,
-                MessageQueueId = _messageQueue.Id
+                ClientSessionId = _clientSessionId,
+                MessageQueueId = _messageQueue.Id,
+                MaxWaitMilliseconds = (int)maxWait.TotalMilliseconds
             };
 
             var remoteEndpointInfo = new EndpointInfo()
@@ -157,12 +168,54 @@ namespace CFMessageQueue.Services
                 throw new MessageQueueException("Error getting next queue message", messageConnectionException);
             }
         }
-
-        public async Task<string?> SubscribeAsync(Action<string> notificationAction, TimeSpan queueSizeNotificationFrequency)
+        
+        public async Task SetProcessed(string queueMessageId, bool processed)
         {
+            if (String.IsNullOrEmpty(queueMessageId))
+            {
+                throw new ArgumentNullException(nameof(queueMessageId));
+            }
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+
+            var queueMessageProcessedMessage = new QueueMessageProcessedMessage()
+            {
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
+                MessageQueueId = _messageQueue.Id,
+                QueueMessageId = queueMessageId,
+                Processed = processed
+            };
+
+            var remoteEndpointInfo = new EndpointInfo()
+            {
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
+            };
+
+            try
+            {
+                _messageHubConnection.SendQueueMessageProcessedMessage(queueMessageProcessedMessage, remoteEndpointInfo);                                
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error notifying that queue message was processed", messageConnectionException);
+            }        
+        }
+
+        public async Task<string?> SubscribeAsync(Action<string, long?> notificationAction, TimeSpan queueSizeNotificationFrequency)
+        {
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+
             var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
             {
                 SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 MessageQueueId = _messageQueue.Id,
                 ActionName = "SUBSCRIBE",
                 QueueSizeFrequencySecs = Convert.ToInt64(queueSizeNotificationFrequency.TotalSeconds)
@@ -192,9 +245,15 @@ namespace CFMessageQueue.Services
 
         public Task UnsubscribeAsync()
         {
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+
             var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
             {
                 SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
                 MessageQueueId = _messageQueue.Id,
                 ActionName = "UNSUBSCRIBE"
             };

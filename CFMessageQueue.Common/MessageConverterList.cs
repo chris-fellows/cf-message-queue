@@ -33,8 +33,12 @@ namespace CFMessageQueue
         private readonly IExternalMessageConverter<GetNextQueueMessageRequest> _getNextQueueMessageRequestConverter = new GetNextQueueMessageRequestConverter();
         private readonly IExternalMessageConverter<GetNextQueueMessageResponse> _getNextQueueMessageResponseConverter = new GetNextQueueMessageResponseConverter();
 
+        private readonly IExternalMessageConverter<MessageQueueNotificationMessage> _messageQueueNotificationMessageConverter = new MessageQueueNotificationMessageConverter();
+
         private readonly IExternalMessageConverter<MessageQueueSubscribeRequest> _messageQueueSubscribeRequestConverter = new MessageQueueSubscribeRequestConverter();
         private readonly IExternalMessageConverter<MessageQueueSubscribeResponse> _messageQueueSubscribeResponseConverter = new MessageQueueSubscribeResponseConverter();
+
+        private readonly IExternalMessageConverter<QueueMessageProcessedMessage> _queueMessageProcessedMessageConverter = new QueueMessageProcessedMessageConverter();
 
         public IExternalMessageConverter<AddMessageHubClientRequest> AddMessageHubClientRequestConverter => _addMessageHubClientRequestConverter;
         public IExternalMessageConverter<AddMessageHubClientResponse> AddMessageHubClientResponseConverter => _addMessageHubClientResponseConverter;
@@ -60,7 +64,11 @@ namespace CFMessageQueue
         public IExternalMessageConverter<GetNextQueueMessageRequest> GetNextQueueMessageRequestConverter => _getNextQueueMessageRequestConverter;
         public IExternalMessageConverter<GetNextQueueMessageResponse> GetNextQueueMessageResponseConverter => _getNextQueueMessageResponseConverter;
 
+        public IExternalMessageConverter<MessageQueueNotificationMessage> MessageQueueNotificationMessageConverter => _messageQueueNotificationMessageConverter;
+
         public IExternalMessageConverter<MessageQueueSubscribeRequest> MessageQueueSubscribeRequestConverter => _messageQueueSubscribeRequestConverter;
         public IExternalMessageConverter<MessageQueueSubscribeResponse> MessageQueueSubscribeResponseConverter => _messageQueueSubscribeResponseConverter;
+
+        public IExternalMessageConverter<QueueMessageProcessedMessage> QueueMessageProcessedMessageConverter => _queueMessageProcessedMessageConverter;
     }
 }

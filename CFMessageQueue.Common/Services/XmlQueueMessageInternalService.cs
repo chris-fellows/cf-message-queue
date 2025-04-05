@@ -18,12 +18,21 @@ namespace CFMessageQueue.Services
 
         }
 
-        public async Task<List<QueueMessageInternal>> GetExpired(string messageQueueId, DateTimeOffset now)
+        public async Task<List<QueueMessageInternal>> GetExpiredAsync(string messageQueueId, DateTimeOffset now)
         {
             // Obviously not very efficient
             var queueMessages = (await GetAllAsync())
                                 .Where(m => m.MessageQueueId == messageQueueId)
                                 .Where(m => m.ExpirySeconds > 0 && m.CreatedDateTime.AddSeconds(m.ExpirySeconds) <= now).ToList();
+
+            return queueMessages;
+        }
+
+        public async Task<List<QueueMessageInternal>> GetByMessageQueueAsync(string messageQueueId)
+        {
+            // Obviously not very efficient
+            var queueMessages = (await GetAllAsync())
+                                .Where(m => m.MessageQueueId == messageQueueId).ToList();                                
 
             return queueMessages;
         }

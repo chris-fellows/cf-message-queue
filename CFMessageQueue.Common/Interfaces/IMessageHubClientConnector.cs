@@ -9,7 +9,21 @@ namespace CFMessageQueue.Interfaces
     public interface IMessageHubClientConnector
     {
         /// <summary>
-        /// Configures message hub client. Refers to either hub config or specific message queue depending on whether
+        /// Creates random security key, typically for new client
+        /// </summary>
+        /// <returns></returns>
+        string CreateRandomSecurityKey();
+
+        /// <summary>
+        /// Configure message hub client permissions for hub level functions
+        /// </summary>
+        /// <param name="messageHubClientId"></param>
+        /// <param name="roleTypes"></param>
+        /// <returns></returns>
+        Task ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes);
+
+        /// <summary>
+        /// Configure message hub client permissions for queue level functions
         /// <paramref name="messageQueueId"/> is set.
         /// </summary>
         /// <param name="messageHubClientId"></param>
@@ -22,8 +36,10 @@ namespace CFMessageQueue.Interfaces
         /// Adds message queue
         /// </summary>
         /// <param name="name"></param>
+        /// <param name="maxConcurrentProcessing"></param>
+        /// <param name="maxSize"></param>
         /// <returns>Message Queue Id</returns>
-        Task<string> AddMessageQueueAsync(string name);
+        Task<string> AddMessageQueueAsync(string name, int maxConcurrentProcessing, int maxSize);
 
         Task DeleteMessageQueueAsync(string messageQueueId);
 

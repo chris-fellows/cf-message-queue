@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CFMessageQueue.Models
+﻿namespace CFMessageQueue.Models
 {
     public abstract class MessageBase
     {
@@ -25,13 +18,17 @@ namespace CFMessageQueue.Models
         public MessageResponse? Response { get; set; }        
 
         /// <summary>
-        /// Security key
+        /// Security key for client.
+        /// 
+        /// Property only set for client request
         /// </summary>
         public string SecurityKey { get; set; } = String.Empty;
 
-        ///// <summary>
-        ///// Client that is sending message
-        ///// </summary>
-        //public string SenderMessageHubClientId { get; set; } = String.Empty;
+        /// <summary>
+        /// Session Id for client.
+        /// 
+        /// Property only set for client request
+        /// </summary>
+        public string ClientSessionId { get; set; } = String.Empty;
     }
 }

@@ -259,6 +259,11 @@ namespace CFMessageQueue
             throw new MessageConnectionException("No response to get next queue message");
         }
 
+        public void SendQueueMessageProcessedMessage(QueueMessageProcessedMessage queueMessageProcessedMessage, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.QueueMessageProcessedMessageConverter.GetConnectionMessage(queueMessageProcessedMessage), remoteEndpointInfo);
+        }
+
         public MessageQueueSubscribeResponse SendMessageQueueSubscribeRequest(MessageQueueSubscribeRequest messageQueueSubscribeRequest, EndpointInfo remoteEndpointInfo)
         {
             _connection.SendMessage(_messageConverterList.MessageQueueSubscribeRequestConverter.GetConnectionMessage(messageQueueSubscribeRequest), remoteEndpointInfo);
@@ -332,6 +337,8 @@ namespace CFMessageQueue
                     return _messageConverterList.AddQueueMessageResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.ConfigureMessageHubClientResponse:
                     return _messageConverterList.ConfigureMessageHubClientResponseConverter.GetExternalMessage(connectionMessage);
+                case MessageTypeIds.ExecuteMessageQueueActionResponse:
+                    return _messageConverterList.ExecuteMessageQueueActionResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetMessageHubsResponse:
                     return _messageConverterList.GetMessageHubsResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetMessageQueuesResponse:

@@ -23,12 +23,28 @@ namespace CFMessageQueue.MessageConverters
                     {
                         Name = "SecurityKey",
                         Value = externalMessage.SecurityKey
-                    },                  
+                    },
+                           new ConnectionMessageParameter()
+                      {
+                          Name = "ClientSessionId",
+                          Value = externalMessage.ClientSessionId
+                      },
                      new ConnectionMessageParameter()
                      {
                          Name = "MessageQueueName",
                          Value = externalMessage.MessageQueueName
+                     },
+                     new ConnectionMessageParameter()
+                     {
+                         Name = "MaxConcurrentProcessing",
+                         Value = externalMessage.MaxConcurrentProcessing.ToString()
+                     },
+                      new ConnectionMessageParameter()
+                     {
+                         Name = "MaxSize",
+                         Value = externalMessage.MaxSize.ToString()
                      }
+                     
                    // new ConnectionMessageParameter()
                    //{
                    //    Name = "MessageQueue",
@@ -54,7 +70,10 @@ namespace CFMessageQueue.MessageConverters
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
-                MessageQueueName = connectionMessage.Parameters.First(p => p.Name == "MessageQueueName").Value
+                ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value,
+                MessageQueueName = connectionMessage.Parameters.First(p => p.Name == "MessageQueueName").Value,
+                MaxConcurrentProcessing = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxConcurrentProcessing").Value),
+                MaxSize = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxSize").Value)
             };
 
             //// Get message queue
