@@ -30,9 +30,13 @@
         {
             statusStrip1 = new StatusStrip();
             toolStrip1 = new ToolStrip();
-            tscbQueue = new ToolStripComboBox();
+            splitContainer1 = new SplitContainer();
+            tvwNodes = new TreeView();
             dgvQueueMessage = new DataGridView();
-            toolStrip1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
+            splitContainer1.Panel1.SuspendLayout();
+            splitContainer1.Panel2.SuspendLayout();
+            splitContainer1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvQueueMessage).BeginInit();
             SuspendLayout();
             // 
@@ -46,42 +50,66 @@
             // 
             // toolStrip1
             // 
-            toolStrip1.Items.AddRange(new ToolStripItem[] { tscbQueue });
             toolStrip1.Location = new Point(0, 0);
             toolStrip1.Name = "toolStrip1";
             toolStrip1.Size = new Size(881, 25);
             toolStrip1.TabIndex = 1;
             toolStrip1.Text = "toolStrip1";
             // 
-            // tscbQueue
+            // splitContainer1
             // 
-            tscbQueue.DropDownStyle = ComboBoxStyle.DropDownList;
-            tscbQueue.Name = "tscbQueue";
-            tscbQueue.Size = new Size(121, 25);
-            tscbQueue.SelectedIndexChanged += tscbQueue_SelectedIndexChanged;
+            splitContainer1.Dock = DockStyle.Fill;
+            splitContainer1.Location = new Point(0, 25);
+            splitContainer1.Name = "splitContainer1";
+            // 
+            // splitContainer1.Panel1
+            // 
+            splitContainer1.Panel1.Controls.Add(tvwNodes);
+            // 
+            // splitContainer1.Panel2
+            // 
+            splitContainer1.Panel2.Controls.Add(dgvQueueMessage);
+            splitContainer1.Size = new Size(881, 451);
+            splitContainer1.SplitterDistance = 293;
+            splitContainer1.TabIndex = 2;
+            // 
+            // tvwNodes
+            // 
+            tvwNodes.Dock = DockStyle.Fill;
+            tvwNodes.Location = new Point(0, 0);
+            tvwNodes.Name = "tvwNodes";
+            tvwNodes.Size = new Size(293, 451);
+            tvwNodes.TabIndex = 0;
+            tvwNodes.AfterSelect += tvwNodes_AfterSelect;
             // 
             // dgvQueueMessage
             // 
             dgvQueueMessage.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dgvQueueMessage.Dock = DockStyle.Fill;
-            dgvQueueMessage.Location = new Point(0, 25);
+            dgvQueueMessage.Location = new Point(0, 0);
+            dgvQueueMessage.MultiSelect = false;
             dgvQueueMessage.Name = "dgvQueueMessage";
-            dgvQueueMessage.Size = new Size(881, 451);
-            dgvQueueMessage.TabIndex = 2;
+            dgvQueueMessage.ReadOnly = true;
+            dgvQueueMessage.RowHeadersVisible = false;
+            dgvQueueMessage.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvQueueMessage.Size = new Size(584, 451);
+            dgvQueueMessage.TabIndex = 0;
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(881, 498);
-            Controls.Add(dgvQueueMessage);
+            Controls.Add(splitContainer1);
             Controls.Add(toolStrip1);
             Controls.Add(statusStrip1);
             Name = "MainForm";
             Text = "Form1";
             Load += MainForm_Load;
-            toolStrip1.ResumeLayout(false);
-            toolStrip1.PerformLayout();
+            splitContainer1.Panel1.ResumeLayout(false);
+            splitContainer1.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).EndInit();
+            splitContainer1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvQueueMessage).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -91,7 +119,8 @@
 
         private StatusStrip statusStrip1;
         private ToolStrip toolStrip1;
-        private ToolStripComboBox tscbQueue;
+        private SplitContainer splitContainer1;
+        private TreeView tvwNodes;
         private DataGridView dgvQueueMessage;
     }
 }
