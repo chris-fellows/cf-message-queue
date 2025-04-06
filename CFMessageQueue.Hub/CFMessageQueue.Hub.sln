@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CFConnectionMessaging.Commo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CFMessageQueue.TestClient", "..\CFMessageQueue.TestClient\CFMessageQueue.TestClient.csproj", "{6A8144F8-D155-463F-A16E-0D7362A7FE97}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CFMessageQueue.UI", "..\CFMessageQueue.UI\CFMessageQueue.UI.csproj", "{7D38F30B-0861-445B-B946-2E513AE4BA1C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{6A8144F8-D155-463F-A16E-0D7362A7FE97}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6A8144F8-D155-463F-A16E-0D7362A7FE97}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6A8144F8-D155-463F-A16E-0D7362A7FE97}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D38F30B-0861-445B-B946-2E513AE4BA1C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D38F30B-0861-445B-B946-2E513AE4BA1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D38F30B-0861-445B-B946-2E513AE4BA1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D38F30B-0861-445B-B946-2E513AE4BA1C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

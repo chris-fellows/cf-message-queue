@@ -27,7 +27,7 @@ namespace CFMessageQueue.TestClient
                     MessageQueueName = "ProducerConsumerQueue1",
                     AdminSecurityKey = SystemConfig.AdminSecurityKey,
                     DefaultSecurityKey = SystemConfig.Client1SecurityKey,
-                    DelayBetweenSend = TimeSpan.FromMilliseconds(1000),
+                    DelayBetweenSend = TimeSpan.FromMilliseconds(200),
                     HubEndpointInfo = SystemConfig.HubEndpointInfo,
                     HubLocalPort = 10160,
                     QueueLocalPort = 10161
@@ -65,14 +65,14 @@ namespace CFMessageQueue.TestClient
             // Configure system
             Configure(consumerConfigs, producerConfigs);
 
-            // Start consumers
-            Console.WriteLine($"Starting {consumerConfigs.Count} consumers");
-            foreach (var consumerConfig in consumerConfigs)
-            {
-                var consumer = new Consumer();
-                consumers.Add(consumer);
-                consumer.Start(consumerConfig, "Consumer" + (consumerConfigs.IndexOf(consumerConfig) + 1).ToString());
-            }
+            //// Start consumers
+            //Console.WriteLine($"Starting {consumerConfigs.Count} consumers");
+            //foreach (var consumerConfig in consumerConfigs)
+            //{
+            //    var consumer = new Consumer();
+            //    consumers.Add(consumer);
+            //    consumer.Start(consumerConfig, "Consumer" + (consumerConfigs.IndexOf(consumerConfig) + 1).ToString());
+            //}
 
             // Start producers
             Console.WriteLine($"Starting {producerConfigs.Count} producers");
