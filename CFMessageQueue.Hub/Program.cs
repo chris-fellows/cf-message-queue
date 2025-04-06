@@ -7,6 +7,7 @@ using CFMessageQueue.Interfaces;
 using CFMessageQueue.Services;
 using CFMessageQueue.Logs;
 using CFMessageQueue.Utilities;
+using CFMessageQueue.Logging;
 
 internal static class Program
 {
@@ -64,27 +65,28 @@ internal static class Program
              .AddScoped<IMessageQueueService>((scope) =>
              {
                  return new XmlMessageQueueService(Path.Combine(configFolder, "MessageQueue"));
-             })
-             //.AddScoped<IMessageQueueSubscriptionService>((scope) =>
-             //{
-             //    return new XmlMessageQueueSubscriptionService(Path.Combine(configFolder, "MessageQueueSubscription"));
-             //})
+             })            
              .AddScoped<IQueueMessageInternalService>((scope) =>
              {
-                return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessageInternal"));
+                 return new XmlQueueMessageInternalService(Path.Combine(configFolder, "QueueMessageInternal"));
              })
               .AddScoped<IQueueMessageHubService>((scope) =>
               {
                   return new XmlQueueMessageHubService(Path.Combine(configFolder, "QueueMessageHub"));
-              })              
+              })
 
               // Add logging (Console & CSV)
               .AddScoped<ISimpleLog>((scope) =>
               {
-                    return new SimpleMultiLog(new() {
+                  return new SimpleMultiLog(new() {
                         new SimpleConsoleLog(),
-                        new SimpleLogCSV(Path.Combine(logFolder, "MessageQueueHub-{date}.txt"))
+                        new SimpleLogCSV(Path.Combine(logFolder, "MessageQueueHub-Simple-{date}.txt"))
                     });
+              })
+
+              .AddScoped<IAuditLog>((scope) =>
+              {
+                  return new AuditLogCSV(Path.Combine(logFolder, "MessageQueueHub-Audit-{date}.txt"));
               })
 
             .BuildServiceProvider();

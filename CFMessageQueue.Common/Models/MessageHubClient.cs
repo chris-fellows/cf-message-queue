@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CFMessageQueue.Models
+﻿namespace CFMessageQueue.Models
 {
     /// <summary>
     /// Message hub client
@@ -13,6 +7,9 @@ namespace CFMessageQueue.Models
     {
         public string Id { get; set; } = String.Empty;
 
+        /// <summary>
+        /// Security key for accessing message hubs
+        /// </summary>
         public string SecurityKey { get; set; } = String.Empty;
     }
 }

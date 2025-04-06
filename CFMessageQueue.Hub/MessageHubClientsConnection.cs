@@ -29,6 +29,12 @@ namespace CFMessageQueue.Hub
         public delegate void ConnectionMessageReceived(ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo);
         public event ConnectionMessageReceived? OnConnectionMessageReceived;
 
+        public delegate void ClientConnected(EndpointInfo endpointInfo);
+        public event ClientConnected? OnClientConnected;
+
+        public delegate void ClientDisconnected(EndpointInfo endpointInfo);
+        public event ClientDisconnected? OnClientDisconnected;
+           
         public MessageHubClientsConnection(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
@@ -46,6 +52,22 @@ namespace CFMessageQueue.Hub
                     {
                         OnConnectionMessageReceived(connectionMessage, messageReceivedInfo);
                     }
+                }
+            };
+
+            _connection.OnClientConnected += delegate (EndpointInfo endpointInfo)
+            {
+                if (OnClientConnected != null)
+                {
+                    OnClientConnected(endpointInfo);
+                }
+            };
+
+            _connection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                if (OnClientDisconnected != null)
+                {
+                    OnClientDisconnected(endpointInfo);
                 }
             };
         }
@@ -81,6 +103,11 @@ namespace CFMessageQueue.Hub
         private bool IsResponseMessage(ConnectionMessage connectionMessage)
         {
             return false;
+        }
+
+        public void SendGetMessageHubClientsResponse(GetMessageHubClientsResponse getMessageHubClientsResponse, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.GetMessageHubClientsResponseConverter.GetConnectionMessage(getMessageHubClientsResponse), remoteEndpointInfo);
         }
 
         public void SendGetMessageHubsResponse(GetMessageHubsResponse getMessageHubsResponse, EndpointInfo remoteEndpointInfo)

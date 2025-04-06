@@ -24,6 +24,9 @@ namespace CFMessageQueue
         private readonly IExternalMessageConverter<ExecuteMessageQueueActionRequest> _executeMessageQueueActionRequestConverter = new ExecuteMessageQueueActionRequestConverter();
         private readonly IExternalMessageConverter<ExecuteMessageQueueActionResponse> _executeMessageQueueActionResponseConverter = new ExecuteMessageQueueActionResponseConverter();
 
+        private readonly IExternalMessageConverter<GetMessageHubClientsRequest> _getMessageHubClientsRequestConverter = new GetMessageHubClientsRequestConverter();
+        private readonly IExternalMessageConverter<GetMessageHubClientsResponse> _getMessageHubClientsResponseConverter = new GetMessageHubClientsResponseConverter();
+
         private readonly IExternalMessageConverter<GetMessageHubsRequest> _getMessageHubsRequestConverter= new GetMessageHubsRequestConverter();
         private readonly IExternalMessageConverter<GetMessageHubsResponse> _getMessageHubsResponseConverter = new GetMessageHubsResponseConverter();
 
@@ -32,6 +35,9 @@ namespace CFMessageQueue
 
         private readonly IExternalMessageConverter<GetNextQueueMessageRequest> _getNextQueueMessageRequestConverter = new GetNextQueueMessageRequestConverter();
         private readonly IExternalMessageConverter<GetNextQueueMessageResponse> _getNextQueueMessageResponseConverter = new GetNextQueueMessageResponseConverter();
+
+        private readonly IExternalMessageConverter<GetQueueMessagesRequest> _getQueueMessagesRequestConverter = new GetQueueMessagesRequestConverter();
+        private readonly IExternalMessageConverter<GetQueueMessagesResponse> _getQueueMessagesResponseConverter = new GetQueueMessagesResponseConverter();
 
         private readonly IExternalMessageConverter<MessageQueueNotificationMessage> _messageQueueNotificationMessageConverter = new MessageQueueNotificationMessageConverter();
 
@@ -55,6 +61,9 @@ namespace CFMessageQueue
         public IExternalMessageConverter<ExecuteMessageQueueActionRequest> ExecuteMessageQueueActionRequestConverter => _executeMessageQueueActionRequestConverter;
         public IExternalMessageConverter<ExecuteMessageQueueActionResponse> ExecuteMessageQueueActionResponseConverter => _executeMessageQueueActionResponseConverter;
 
+        public IExternalMessageConverter<GetMessageHubClientsRequest> GetMessageHubClientsRequestConverter => _getMessageHubClientsRequestConverter;
+        public IExternalMessageConverter<GetMessageHubClientsResponse> GetMessageHubClientsResponseConverter => _getMessageHubClientsResponseConverter;
+
         public IExternalMessageConverter<GetMessageHubsRequest> GetMessageHubsRequestConverter => _getMessageHubsRequestConverter;
         public IExternalMessageConverter<GetMessageHubsResponse> GetMessageHubsResponseConverter => _getMessageHubsResponseConverter;
 
@@ -63,6 +72,9 @@ namespace CFMessageQueue
 
         public IExternalMessageConverter<GetNextQueueMessageRequest> GetNextQueueMessageRequestConverter => _getNextQueueMessageRequestConverter;
         public IExternalMessageConverter<GetNextQueueMessageResponse> GetNextQueueMessageResponseConverter => _getNextQueueMessageResponseConverter;
+
+        public IExternalMessageConverter<GetQueueMessagesRequest> GetQueueMessagesRequestConverter => _getQueueMessagesRequestConverter;
+        public IExternalMessageConverter<GetQueueMessagesResponse> GetQueueMessagesResponseConverter => _getQueueMessagesResponseConverter;
 
         public IExternalMessageConverter<MessageQueueNotificationMessage> MessageQueueNotificationMessageConverter => _messageQueueNotificationMessageConverter;
 

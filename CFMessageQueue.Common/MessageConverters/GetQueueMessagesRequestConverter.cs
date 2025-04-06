@@ -1,7 +1,6 @@
 ﻿using CFConnectionMessaging.Interfaces;
 using CFConnectionMessaging.Models;
 using CFMessageQueue.Models;
-using CFMessageQueue.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,9 +9,9 @@ using System.Threading.Tasks;
 
 namespace CFMessageQueue.MessageConverters
 {
-    public class GetNextQueueMessageRequestConverter : IExternalMessageConverter<GetNextQueueMessageRequest>
+    public class GetQueueMessagesRequestConverter : IExternalMessageConverter<GetQueueMessagesRequest>
     {
-        public ConnectionMessage GetConnectionMessage(GetNextQueueMessageRequest externalMessage)
+        public ConnectionMessage GetConnectionMessage(GetQueueMessagesRequest externalMessage)
         {
             var connectionMessage = new ConnectionMessage()
             {
@@ -37,30 +36,30 @@ namespace CFMessageQueue.MessageConverters
                    },
                       new ConnectionMessageParameter()
                    {
-                       Name = "MaxWaitMilliseconds",
-                       Value = externalMessage.MaxWaitMilliseconds.ToString()
+                       Name = "PageItems",
+                       Value = externalMessage.PageItems.ToString()
                    },
                           new ConnectionMessageParameter()
                    {
-                       Name = "MaxProcessingMilliseconds",
-                       Value = externalMessage.MaxProcessingMilliseconds.ToString()
+                       Name = "Page",
+                       Value = externalMessage.Page.ToString()
                    },
                 }
             };
             return connectionMessage;
         }
 
-        public GetNextQueueMessageRequest GetExternalMessage(ConnectionMessage connectionMessage)
+        public GetQueueMessagesRequest GetExternalMessage(ConnectionMessage connectionMessage)
         {
-            var externalMessage = new GetNextQueueMessageRequest()
+            var externalMessage = new GetQueueMessagesRequest()
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,
                 ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value,
                 MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value,
-                MaxWaitMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxWaitMilliseconds").Value),
-                MaxProcessingMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxProcessingMilliseconds").Value)
-            };   
+                PageItems = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "PageItems").Value),
+                Page = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "Page").Value)
+            };
 
             return externalMessage;
         }

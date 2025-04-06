@@ -56,9 +56,9 @@ namespace CFMessageQueue.TestClient
                     new List<RoleTypes>()
                     {
                         //RoleTypes.ClearQueue,
-                        RoleTypes.ReadQueue,
-                        RoleTypes.WriteQueue,
-                        RoleTypes.SubscribeQueue
+                        RoleTypes.QueueReadQueue,
+                        RoleTypes.QueueWriteQueue,
+                        RoleTypes.QueueSubscribeQueue
                     });
 
                 return messageHubClientId;

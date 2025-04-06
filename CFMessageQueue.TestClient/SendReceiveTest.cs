@@ -21,19 +21,10 @@ namespace CFMessageQueue.TestClient
             //var cancellationTokenSource = new CancellationTokenSource();
 
             // Default role types for queue functions
-            var defaultQueueRoleTypes = new List<RoleTypes>()
-            {
-                RoleTypes.ReadQueue,
-                RoleTypes.WriteQueue,
-                RoleTypes.SubscribeQueue
-            };
+            var defaultQueueRoleTypes = RoleTypeUtilities.DefaultNonAdminQueueClientRoleTypes;
 
             // Default role types for hub functions
-            var defaultHubRoleTypes = new List<RoleTypes>()
-            {
-                RoleTypes.GetMessageHubs,
-                RoleTypes.GetMessageQueues
-            };
+            var defaultHubRoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes;
 
             var configurer = new Configurer();
 
@@ -48,8 +39,10 @@ namespace CFMessageQueue.TestClient
 
             // Create message queue                        
             Console.WriteLine($"Creating queue {SystemConfig.Queue1Name}");
-            var messageQueueId = await messageHubClientConnectorAdmin.AddMessageQueueAsync(SystemConfig.Queue1Name, 5, 100000000);
+            var messageQueueId = await messageHubClientConnectorAdmin.AddMessageQueueAsync(SystemConfig.Queue1Name, 5, 10000);
             Console.WriteLine($"Creating queue (Id={messageQueueId})");
+
+            //await messageHubClientConnectorAdmin.ConfigureMessageHubClientAsync(messageHubClientId, messageQueueId, queueRoleTypes);
 
             // Create client 1 with hub & queue permissions
             var messageHubClientId1 = await CreateMessageHubClient(messageHubClientConnectorAdmin, SystemConfig.Client1SecurityKey,
@@ -86,9 +79,9 @@ namespace CFMessageQueue.TestClient
             // Get new message queue
             var messageQueue = messageQueues.First(q => q.Id == messageQueueId);
 
-            // Set current message queue for client
-            messageQueueClientConnector1.SetMessageQueue(messageQueue);
-            messageQueueClientConnector2.SetMessageQueue(messageQueue);
+            // Set current message queue
+            messageQueueClientConnector1.MessageQueue = messageQueue;
+            messageQueueClientConnector2.MessageQueue = messageQueue;
            
             // Subscribe on client 2 to receive notifications
             var subscribeId = await messageQueueClientConnector2.SubscribeAsync((eventName, queueSize) =>

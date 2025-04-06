@@ -3,13 +3,6 @@ using CFMessageQueue.Enums;
 using CFMessageQueue.Exceptions;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
-using System;
-using System.Collections.Generic;
-using System.Data.Common;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace CFMessageQueue.Services
 {
@@ -221,6 +214,27 @@ namespace CFMessageQueue.Services
             catch (MessageConnectionException messageConnectionException)
             {
                 throw new MessageQueueException("Error getting message hubs", messageConnectionException);
+            }
+        }
+
+        public Task<List<MessageHubClient>> GetMessageHubClientsAsync()
+        {
+            var getMessageHubClientsRequest = new GetMessageHubClientsRequest()
+            {
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendGetMessageHubClientsRequest(getMessageHubClientsRequest, _remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);
+
+                return Task.FromResult(response.MessageHubClients);
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error getting message hub clients", messageConnectionException);
             }
         }
 

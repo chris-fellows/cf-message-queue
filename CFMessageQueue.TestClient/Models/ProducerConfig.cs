@@ -14,6 +14,9 @@ namespace CFMessageQueue.TestClient.Models
 
         public TimeSpan DelayBetweenSend { get; set; } = TimeSpan.FromSeconds(10);
 
-        public int LocalPort { get; set; }
+
+        public int HubLocalPort { get; set; }
+
+        public int QueueLocalPort { get; set; }
     }
 }

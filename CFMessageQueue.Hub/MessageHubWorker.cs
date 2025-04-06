@@ -60,6 +60,8 @@ namespace CFMessageQueue.Hub
             _log = _serviceProvider.GetRequiredService<ISimpleLog>();
 
             _messageHubClientsConnection = new MessageHubClientsConnection(serviceProvider);
+
+            // Handle connection message received
             _messageHubClientsConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Received message {connectionMessage.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
@@ -73,6 +75,18 @@ namespace CFMessageQueue.Hub
                 _queueItems.Enqueue(queueItem);
 
                 _timer.Interval = 100;
+            };
+
+            // Handle client connection
+            _messageHubClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Hub client connected {endpointInfo.Ip}:{endpointInfo.Port}");
+            };
+
+            // Handle client disconnection
+            _messageHubClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Hub client disconnected {endpointInfo.Ip}:{endpointInfo.Port}");
             };
 
             _timer = new System.Timers.Timer();
@@ -181,6 +195,11 @@ namespace CFMessageQueue.Hub
                         _queueItemTasks.Add(new QueueItemTask(HandleExecuteMessageQueueAction(executeMessageQueueActionRequest, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
+                    case MessageTypeIds.GetMessageHubClientsRequest:
+                        var getMessageHubClientsRequest = _messageHubClientsConnection.MessageConverterList.GetMessageHubClientsRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
+                        _queueItemTasks.Add(new QueueItemTask(HandleGetMessageHubClientsRequestAsync(getMessageHubClientsRequest, queueItem.MessageReceivedInfo), queueItem));
+                        break;
+
                     case MessageTypeIds.GetMessageHubsRequest:
                         var getMessageHubsRequest = _messageHubClientsConnection.MessageConverterList.GetMessageHubsRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
                         _queueItemTasks.Add(new QueueItemTask(HandleGetMessageHubsRequestAsync(getMessageHubsRequest, queueItem.MessageReceivedInfo), queueItem));
@@ -226,6 +245,62 @@ namespace CFMessageQueue.Hub
         }
 
         /// <summary>
+        /// Handles request to get message hub clients
+        /// </summary>
+        /// <param name="getMessageHubClientsRequest"></param>
+        /// <param name="messageReceivedInfo"></param>
+        /// <returns></returns>
+        private Task HandleGetMessageHubClientsRequestAsync(GetMessageHubClientsRequest getMessageHubClientsRequest, MessageReceivedInfo messageReceivedInfo)
+        {
+            return Task.Factory.StartNew(async () =>
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {getMessageHubClientsRequest.TypeId}");
+
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var messageHubClientService = scope.ServiceProvider.GetService<IMessageHubClientService>();
+                    var queueMessageHubService = scope.ServiceProvider.GetRequiredService<IQueueMessageHubService>();
+
+                    var response = new GetMessageHubClientsResponse()
+                    {
+                        Response = new MessageResponse()
+                        {
+                            IsMore = false,
+                            MessageId = getMessageHubClientsRequest.Id,
+                            Sequence = 1
+                        },
+                        MessageHubClients = new()
+                    };
+
+                    var messageHubClient = GetMessageHubClientBySecurityKey(getMessageHubClientsRequest.SecurityKey, messageHubClientService);
+
+                    var securityItem = messageHubClient == null ? null : _queueMessageHub.SecurityItems.FirstOrDefault(si => si.MessageHubClientId == messageHubClient.Id);
+
+                    if (messageHubClient == null)
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                    }
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubReadMessageHubClients))
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                    }
+                    else
+                    {
+                        var messageHubClients = await messageHubClientService.GetAllAsync();
+                        response.MessageHubClients = messageHubClients;
+                    }
+
+                    // Send response
+                    _messageHubClientsConnection.SendGetMessageHubClientsResponse(response, messageReceivedInfo.RemoteEndpointInfo);
+                }
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getMessageHubClientsRequest.TypeId}");
+            });
+        }
+
+        /// <summary>
         /// Handles request to get message hubs
         /// </summary>
         /// <param name="getMessageHubsRequest"></param>
@@ -262,7 +337,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.GetMessageHubs))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubReadMessageHubs))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -318,7 +393,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.GetMessageQueues))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubReadMessageQueues))
                     {                        
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -376,7 +451,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.Admin))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubAdmin))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -399,7 +474,6 @@ namespace CFMessageQueue.Hub
                         }
                         else
                         {
-
                             // Add message hub client
                             var newMessageHubClient = new MessageHubClient()
                             {
@@ -417,11 +491,7 @@ namespace CFMessageQueue.Hub
                             queueMessageHub.SecurityItems.Add(new SecurityItem()
                             {
                                 MessageHubClientId = newMessageHubClient.Id,
-                                RoleTypes = new List<RoleTypes>()
-                            {
-                                RoleTypes.GetMessageHubs,
-                                RoleTypes.GetMessageQueues
-                            }
+                                RoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes                                
                             });
                             await queueMessageHubService.UpdateAsync(queueMessageHub);
 
@@ -485,7 +555,7 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                         }
-                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.Admin))
+                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubAdmin))
                         {
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -580,23 +650,7 @@ namespace CFMessageQueue.Hub
         private Task HandleConfigureMessageHubClientRequestAsync(ConfigureMessageHubClientRequest configureMessageHubClientRequest, MessageReceivedInfo messageReceivedInfo)
         {
             return Task.Factory.StartNew(async () =>
-            {
-                // Role types that can be set for MessageQueueHub.SecurityItems[].RoleTypes
-                var hubRoleTypes = new List<RoleTypes>
-                            {
-                                RoleTypes.Admin,
-                                RoleTypes.GetMessageQueues,
-                                RoleTypes.GetMessageHubs
-                            };
-
-                // Role types that can be set for MessageQueue.SecurityItems[].RoleTypes
-                var queueRoleTypes = new List<RoleTypes>
-                            {
-                                RoleTypes.ReadQueue,
-                                RoleTypes.SubscribeQueue,
-                                RoleTypes.WriteQueue
-                            };
-
+            {              
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {configureMessageHubClientRequest.TypeId}");
 
                 using (var scope = _serviceProvider.CreateScope())
@@ -627,7 +681,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.Admin))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubAdmin))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -638,13 +692,13 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Hub Client Id is invalid";
                     }
                     else if (String.IsNullOrEmpty(configureMessageHubClientRequest.MessageQueueId) &&
-                            configureMessageHubClientRequest.RoleTypes.Except(hubRoleTypes).Any())
+                            configureMessageHubClientRequest.RoleTypes.Except(RoleTypeUtilities.HubRoleTypes).Any())
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Some role types are not valid for the hub";
                     }
                     else if (!String.IsNullOrEmpty(configureMessageHubClientRequest.MessageQueueId) &&
-                            configureMessageHubClientRequest.RoleTypes.Except(queueRoleTypes).Any())
+                            configureMessageHubClientRequest.RoleTypes.Except(RoleTypeUtilities.QueueRoleTypes).Any())
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Some role types are not valid for queues";
@@ -671,7 +725,7 @@ namespace CFMessageQueue.Hub
                                     securityItemEdit.RoleTypes = configureMessageHubClientRequest.RoleTypes;
                                 }
 
-                                // Remove security item if not roles
+                                // Remove security item if no roles
                                 if (!securityItemEdit.RoleTypes.Any())
                                 {
                                     queueMessageHub.SecurityItems.Remove(securityItemEdit);
@@ -765,7 +819,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.Admin))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.HubAdmin))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -800,21 +854,16 @@ namespace CFMessageQueue.Hub
                             }
                             else
                             {
-                                //// If message hub has Admin role then give hub client full permissions on queue
-                                //var queueMessageHub = await messageHubService.GetByIdAsync(_queueMessageHub.Id);
-                                //if (queueMessageHub.SecurityItems.Any(si => si.RoleTypes.Contains(RoleTypes.Admin)))
-                                //{
-                                //    queueMessageHub.SecurityItems.Add(new SecurityItem()
-                                //    {
-                                //        MessageHubClientId = messageHubClient.Id,
-                                //        RoleTypes = new List<RoleTypes>()
-                                //        {
-                                //            RoleTypes.ReadQueue,
-                                //            RoleTypes.WriteQueue,
-                                //            RoleTypes.SubscribeQueue
-                                //        }
-                                //    });
-                                //}
+                                // Give every hub admin default permissions for queue. Saves them having to explicitly set permissions afterwards.
+                                var messageHub = await messageHubService.GetByIdAsync(_queueMessageHub.Id);
+                                foreach(var currentSecurityItem in messageHub.SecurityItems.Where(si => si.RoleTypes.Contains(RoleTypes.HubAdmin)))
+                                {
+                                    messageQueue.SecurityItems.Add(new SecurityItem()
+                                    {
+                                        MessageHubClientId = currentSecurityItem.MessageHubClientId,
+                                        RoleTypes = RoleTypeUtilities.DefaultAdminQueueClientRoleTypes
+                                    });
+                                }
 
                                 await messageQueueService.AddAsync(messageQueue);
 
@@ -936,7 +985,15 @@ namespace CFMessageQueue.Hub
 
                 for (int index = 0; index < 30; index++)
                 {
-                    var logFile = Path.Combine(_systemConfig.LogFolder, $"MessageQueueHub-{date.Subtract(TimeSpan.FromDays(index)).ToString("yyyy-MM-dd")}.txt");
+                    // Delete simple log
+                    var logFile = Path.Combine(_systemConfig.LogFolder, $"MessageQueueHub-Simple-{date.Subtract(TimeSpan.FromDays(index)).ToString("yyyy-MM-dd")}.txt");
+                    if (File.Exists(logFile))
+                    {
+                        File.Delete(logFile);
+                    }
+
+                    // Delete audit log
+                    logFile = Path.Combine(_systemConfig.LogFolder, $"MessageQueueHub-Audit-{date.Subtract(TimeSpan.FromDays(index)).ToString("yyyy-MM-dd")}.txt");
                     if (File.Exists(logFile))
                     {
                         File.Delete(logFile);

@@ -195,12 +195,7 @@ namespace CFMessageQueue.Hub
                     new SecurityItem()
                     {
                         MessageHubClientId = adminMessageHubClient.Id,
-                        RoleTypes = new List<RoleTypes>()
-                        {
-                            RoleTypes.Admin,
-                            RoleTypes.GetMessageHubs,
-                            RoleTypes.GetMessageQueues
-                        }
+                        RoleTypes = RoleTypeUtilities.DefaultAdminHubClientRoleTypes
                     }
                 }
             };

@@ -33,29 +33,36 @@ namespace CFMessageQueue.Services
             _messageHubConnection.Dispose();            
         }
 
-        public void SetMessageQueue(MessageQueue messageQueue)
+        public MessageQueue? MessageQueue
         {
-            // Clean up
-            _messageHubConnection.StopListening();
-
-            _messageQueue = messageQueue;
-            _messageHubConnection = new MessageHubConnection();
-            _messageHubConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+            get { return _messageQueue; }
+            set
             {
-                // If notification then forward it
-                if (connectionMessage.TypeId == MessageTypeIds.MessageQueueNotification &&
-                    _notificationAction != null)
+                // Clean up
+                _messageHubConnection.StopListening();
+
+                _messageQueue = value;
+                if (_messageQueue != null)
                 {
-                    var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationMessageConverter.GetExternalMessage(connectionMessage);
+                    _messageHubConnection = new MessageHubConnection();
+                    _messageHubConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+                    {
+                        // If notification then forward it
+                        if (connectionMessage.TypeId == MessageTypeIds.MessageQueueNotification &&
+                            _notificationAction != null)
+                        {
+                            var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationMessageConverter.GetExternalMessage(connectionMessage);
 
-                    // Notify
-                    Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));
+                            // Notify
+                            Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));
+                        }
+                    };
+
+                    _messageHubConnection.StartListening(_localPort);
                 }
-            };
-          
-            _messageHubConnection.StartListening(_localPort);
+            }
         }
-
+      
         /// <summary>
         /// Gets queue message in internal format (Serialized content)
         /// </summary>
@@ -203,6 +210,49 @@ namespace CFMessageQueue.Services
             {
                 throw new MessageQueueException("Error notifying that queue message was processed", messageConnectionException);
             }        
+        }
+
+        public async Task<List<QueueMessage>> GetQueueMessages(int pageItems, int page)
+        {
+            if (_messageQueue == null)
+            {
+                throw new ArgumentException("Queue must be set");
+            }
+            if (pageItems < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pageItems), "Page Items must be 1 or more");
+            }
+            if (page < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(page), "Page must be 1 or more");
+            }
+
+            var getQueueMessagesRequest = new GetQueueMessagesRequest()
+            {
+                SecurityKey = _securityKey,
+                ClientSessionId = _clientSessionId,
+                MessageQueueId = _messageQueue.Id,
+                PageItems = pageItems,
+                Page = page
+            };
+
+            var remoteEndpointInfo = new EndpointInfo()
+            {
+                Ip = _messageQueue.Ip,
+                Port = _messageQueue.Port
+            };
+
+            try
+            {
+                var response = _messageHubConnection.SendGetQueueMessagesRequest(getQueueMessagesRequest, remoteEndpointInfo);
+                ThrowResponseExceptionIfRequired(response);
+
+                return response.QueueMessages == null ? null : response.QueueMessages.Select(m => GetQueueMessageExternal(m)).ToList();
+            }
+            catch (MessageConnectionException messageConnectionException)
+            {
+                throw new MessageQueueException("Error getting queue messages", messageConnectionException);
+            }
         }
 
         public async Task<string?> SubscribeAsync(Action<string, long?> notificationAction, TimeSpan queueSizeNotificationFrequency)

@@ -1,17 +1,20 @@
 ﻿namespace CFMessageQueue.Enums
 {
     /// <summary>
-    /// Role types. Role refers to whole hub or specific queue
+    /// Role types. Role type is either hub level or queue level.
     /// </summary>
+    /// <remarks>Please keep RoleTypeUtilities class updated with changes</remarks>
     public enum RoleTypes
     {
-        Admin,                  // Hub level
-        GetMessageHubs,         // Hub level
-        GetMessageQueues,       // Hub level
-        //DeleteQueue,            // Hub level
-        //ClearQueue,             // Hub level
-        ReadQueue,              // Queue level
-        SubscribeQueue,         // Queue level
-        WriteQueue,             // Queue level
+        // Hub level roles
+        HubAdmin,                   // Includes clear/delete queue
+        HubReadMessageHubClients,
+        HubReadMessageHubs,      
+        HubReadMessageQueues,    
+
+        // Queue level roles        
+        QueueReadQueue,
+        QueueSubscribeQueue,
+        QueueWriteQueue,
     }
 }

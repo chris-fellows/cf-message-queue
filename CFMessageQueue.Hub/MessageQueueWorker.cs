@@ -44,7 +44,7 @@ namespace CFMessageQueue.Hub
         private TimeSpan _logStatisticsFrequency = TimeSpan.FromSeconds(60);
         private DateTimeOffset _lastLogStatistics = DateTimeOffset.MinValue;
 
-        private readonly ISimpleLog _log;
+        private readonly ISimpleLog _log;      
 
         private readonly Mutex _queueMutex = new Mutex();
 
@@ -68,6 +68,8 @@ namespace CFMessageQueue.Hub
             _log = serviceProvider.GetRequiredService<ISimpleLog>();
 
             _messageQueueClientsConnection = new MessageQueueClientsConnection(serviceProvider);            
+
+            // Handle connection message received
             _messageQueueClientsConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Received message {connectionMessage.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
@@ -81,6 +83,21 @@ namespace CFMessageQueue.Hub
                 _queueItems.Enqueue(queueItem);
 
                 _timer.Interval = 100;
+            };
+
+            // Handle client connection
+            _messageQueueClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Queue client connected {endpointInfo.Ip}:{endpointInfo.Port}");
+            };
+
+            // Handle client disconnection
+            _messageQueueClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Queue client disconnected {endpointInfo.Ip}:{endpointInfo.Port}");
+
+                // Remove subscriptions
+                _clientQueueSubscriptions.RemoveAll(s => s.RemoteEndpointInfo.Ip == endpointInfo.Ip && s.RemoteEndpointInfo.Port == endpointInfo.Port);
             };
 
             _timer = new System.Timers.Timer();
@@ -213,6 +230,11 @@ namespace CFMessageQueue.Hub
                     case MessageTypeIds.GetNextQueueMessageRequest:
                         var getNextQueueMessageRequest = _messageQueueClientsConnection.MessageConverterList.GetNextQueueMessageRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
                         _queueItemTasks.Add(new QueueItemTask(HandleGetNextQueueMessageRequestAsync(getNextQueueMessageRequest, queueItem.MessageReceivedInfo), queueItem));
+                        break;
+
+                    case MessageTypeIds.GetQueueMessagesRequest:
+                        var getQueueMessagesRequest = _messageQueueClientsConnection.MessageConverterList.GetQueueMessagesRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
+                        _queueItemTasks.Add(new QueueItemTask(HandleGetQueueMessagesRequestAsync(getQueueMessagesRequest, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
                     case MessageTypeIds.MessageQueueSubscribeRequest:
@@ -383,7 +405,7 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                             response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
                         }
-                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.WriteQueue))
+                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueWriteQueue))
                         {
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -489,7 +511,7 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                             response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
                         }
-                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.ReadQueue))
+                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueReadQueue))
                         {
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
@@ -592,6 +614,94 @@ namespace CFMessageQueue.Hub
             });
         }
 
+
+        /// <summary>
+        /// Handles request to get queue messages page
+        /// </summary>
+        /// <param name="getNextQueueMessageRequest"></param>
+        /// <param name="messageReceivedInfo"></param>
+        /// <returns></returns>
+        private Task HandleGetQueueMessagesRequestAsync(GetQueueMessagesRequest getQueueMessagesRequest, MessageReceivedInfo messageReceivedInfo)
+        {
+            return Task.Factory.StartNew(async () =>
+            {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {getQueueMessagesRequest.TypeId}");
+
+                var isHasMutex = false;
+                try
+                {
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
+                        var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+
+                        var response = new GetQueueMessagesResponse()
+                        {
+                            Response = new MessageResponse()
+                            {
+                                IsMore = false,
+                                MessageId = getQueueMessagesRequest.Id,
+                                Sequence = 1
+                            },
+                        };
+
+                        var messageHubClient = GetMessageHubClientBySecurityKey(getQueueMessagesRequest.SecurityKey, messageHubClientService);
+
+                        var messageQueue = await messageQueueService.GetByIdAsync(getQueueMessagesRequest.MessageQueueId);
+
+                        var securityItem = (messageQueue == null || messageHubClient == null) ?
+                                        null : messageQueue.SecurityItems.FirstOrDefault(si => si.MessageHubClientId == messageHubClient.Id);
+
+                        if (messageHubClient == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (messageQueue == null)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
+                        }
+                        else if (getQueueMessagesRequest.Page < 1 || getQueueMessagesRequest.PageItems < 1)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (getQueueMessagesRequest.PageItems > 500)   // Limit page size requests
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Page Items must be 500 or less";
+                        }
+                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueReadQueue))
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else
+                        {
+                            // Get page of messages
+                            // TODO: Return page count
+                            response.QueueMessages = (await queueMessageService.GetByMessageQueueAsync(getQueueMessagesRequest.MessageQueueId))
+                                                .OrderBy(m => m.CreatedDateTime)
+                                                .Skip((getQueueMessagesRequest.Page - 1) * getQueueMessagesRequest.PageItems)
+                                                .Take(getQueueMessagesRequest.PageItems)
+                                                .ToList();
+                        }
+
+                        // Send response
+                        _messageQueueClientsConnection.SendGetQueueMessagesResponse(response, messageReceivedInfo.RemoteEndpointInfo);
+                    }
+                }
+                finally
+                {
+                    if (isHasMutex) _queueMutex.ReleaseMutex();
+                }
+
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getQueueMessagesRequest.TypeId}");
+            });
+        }
+
         /// <summary>
         /// Handles message queue subscribe request
         /// </summary>
@@ -640,7 +750,7 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                         response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
                     }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.SubscribeQueue))
+                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueSubscribeQueue))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);

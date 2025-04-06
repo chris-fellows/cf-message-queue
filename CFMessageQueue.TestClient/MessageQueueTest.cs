@@ -11,7 +11,8 @@ namespace CFMessageQueue.TestClient
             {
                 //var contentSerializer = new QueueMessageContentSerializer();
 
-                messageQueueClientConnector.SetMessageQueue(messageQueue);
+                // Set current message queue
+                messageQueueClientConnector.MessageQueue = messageQueue;
 
                 // Create test object to send
                 var testObject = new TestObject()
@@ -43,7 +44,8 @@ namespace CFMessageQueue.TestClient
             {
                 var contentSerializer = new QueueMessageContentSerializer();
 
-                messageQueueClientConnector.SetMessageQueue(messageQueue);
+                // Set current message queue
+                messageQueueClientConnector.MessageQueue = messageQueue;
 
                 var queueMessage = await messageQueueClientConnector.GetNextAsync(TimeSpan.Zero);
 

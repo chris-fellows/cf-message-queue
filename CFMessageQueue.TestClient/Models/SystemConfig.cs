@@ -15,6 +15,8 @@ namespace CFMessageQueue.TestClient.Models
 
         public static string Client2SecurityKey { get; set; } = "6c3f7a9e-3ab8-428c-864a-b01c936bccf9";
 
+        public static string Client3SecurityKey { get; set; } = "ea0b9d0a-9f7c-4d87-908d-14260d298d81";
+
         /// <summary>
         /// Security key for admin functions. E.g. Create clients etc
         /// </summary>

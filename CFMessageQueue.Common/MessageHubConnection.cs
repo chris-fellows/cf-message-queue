@@ -79,9 +79,11 @@ namespace CFMessageQueue
                 MessageTypeIds.AddQueueMessageResponse,
                 MessageTypeIds.ConfigureMessageHubClientResponse,
                 MessageTypeIds.ExecuteMessageQueueActionResponse,
+                MessageTypeIds.GetMessageHubClientsResponse,
                 MessageTypeIds.GetMessageHubsResponse,
                 MessageTypeIds.GetMessageQueuesResponse,
                 MessageTypeIds.GetNextQueueMessageResponse,
+                MessageTypeIds.GetQueueMessagesResponse,
                 MessageTypeIds.MessageQueueSubscribeResponse                 
             };
 
@@ -199,6 +201,27 @@ namespace CFMessageQueue
             throw new MessageConnectionException("No response to add message to queue");
         }
 
+
+        public GetMessageHubClientsResponse SendGetMessageHubClientsRequest(GetMessageHubClientsRequest getMessageHubClientsRequest, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.GetMessageHubClientsRequestConverter.GetConnectionMessage(getMessageHubClientsRequest), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(getMessageHubClientsRequest, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+            if (isGotAllMessages)
+            {
+                return (GetMessageHubClientsResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to get message hub clients");
+        }
+
         public GetMessageHubsResponse SendGetMessageHubsRequest(GetMessageHubsRequest getMessageHubsRequest, EndpointInfo remoteEndpointInfo)
         {
             _connection.SendMessage(_messageConverterList.GetMessageHubsRequestConverter.GetConnectionMessage(getMessageHubsRequest), remoteEndpointInfo);
@@ -257,6 +280,26 @@ namespace CFMessageQueue
             }
 
             throw new MessageConnectionException("No response to get next queue message");
+        }
+
+        public GetQueueMessagesResponse SendGetQueueMessagesRequest(GetQueueMessagesRequest getQueueMessagesRequest, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.GetQueueMessagesRequestConverter.GetConnectionMessage(getQueueMessagesRequest), remoteEndpointInfo);
+
+            // Wait for response
+            var responseMessages = new List<MessageBase>();
+            var isGotAllMessages = WaitForResponses(getQueueMessagesRequest, _responseTimeout, _responseMessages,
+                  (responseMessage) =>
+                  {
+                      responseMessages.Add(responseMessage);
+                  });
+
+            if (isGotAllMessages)
+            {
+                return (GetQueueMessagesResponse)responseMessages.First();
+            }
+
+            throw new MessageConnectionException("No response to get queue messages");
         }
 
         public void SendQueueMessageProcessedMessage(QueueMessageProcessedMessage queueMessageProcessedMessage, EndpointInfo remoteEndpointInfo)
@@ -339,12 +382,16 @@ namespace CFMessageQueue
                     return _messageConverterList.ConfigureMessageHubClientResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.ExecuteMessageQueueActionResponse:
                     return _messageConverterList.ExecuteMessageQueueActionResponseConverter.GetExternalMessage(connectionMessage);
+                case MessageTypeIds.GetMessageHubClientsResponse:
+                    return _messageConverterList.GetMessageHubClientsResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetMessageHubsResponse:
                     return _messageConverterList.GetMessageHubsResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetMessageQueuesResponse:
                     return _messageConverterList.GetMessageQueuesResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.GetNextQueueMessageResponse:
                     return _messageConverterList.GetNextQueueMessageResponseConverter.GetExternalMessage(connectionMessage);
+                case MessageTypeIds.GetQueueMessagesResponse:
+                    return _messageConverterList.GetQueueMessagesResponseConverter.GetExternalMessage(connectionMessage);
                 case MessageTypeIds.MessageQueueSubscribeResponse:
                     return _messageConverterList.MessageQueueSubscribeResponseConverter.GetExternalMessage(connectionMessage);
             }

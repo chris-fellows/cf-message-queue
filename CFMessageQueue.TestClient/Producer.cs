@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -22,13 +23,16 @@ namespace CFMessageQueue.TestClient
         private ProducerConfig? _producerConfig;
         private Thread? _thread;
 
-        public void Start(ProducerConfig producerConfig)
+        private string _id = "";
+
+        public void Start(ProducerConfig producerConfig, string id)
         {
             if (_thread != null)
             {
                 throw new ArgumentException("Producer is already running");
             }
 
+            _id = id;
             _producerConfig = producerConfig;
             _thread = new Thread(Run);
             _thread.Start();
@@ -46,14 +50,13 @@ namespace CFMessageQueue.TestClient
 
         public void Run()
         {
-            Console.WriteLine("Producer has started");
+            Console.WriteLine($"{_id}: Producer has started");
             
-            var cancellationToken = _cancellationTokenSource.Token;         
+            var cancellationToken = _cancellationTokenSource.Token;
 
-            var messageHubClientConnector = new MessageHubClientConnector(_producerConfig.HubEndpointInfo,                                         
-                                        _producerConfig.DefaultSecurityKey,
-                                        NetworkUtilities.GetFreeLocalPort(SystemConfig.MinClientLocalPort, SystemConfig.MaxClientLocalPort, new()));
-
+            var messageHubClientConnector = new MessageHubClientConnector(_producerConfig.HubEndpointInfo,
+                                        _producerConfig.DefaultSecurityKey, _producerConfig.HubLocalPort);
+                                        
             // Get message queue Id from name            
             var messageQueues = messageHubClientConnector.GetMessageQueuesAsync().Result;
             var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == _producerConfig.MessageQueueName);
@@ -62,14 +65,14 @@ namespace CFMessageQueue.TestClient
                 throw new ArgumentException($"Queue {_producerConfig.MessageQueueName} does not exist");
             }
             
-            // Create message queue client
-            var clientLocalPort = NetworkUtilities.GetFreeLocalPort(SystemConfig.MinClientLocalPort, SystemConfig.MaxClientLocalPort, new());            
-            var messageQueueClientConnector = new MessageQueueClientConnector(_producerConfig.DefaultSecurityKey, clientLocalPort);
+            // Create message queue client            
+            var messageQueueClientConnector = new MessageQueueClientConnector(_producerConfig.DefaultSecurityKey, _producerConfig.QueueLocalPort);
 
             // Set client current queue
-            messageQueueClientConnector.SetMessageQueue(messageQueue);
-          
+            messageQueueClientConnector.MessageQueue = messageQueue;
+
             // Run until cancelled
+            int countMessagesSent = 0;
             while (!cancellationToken.IsCancellationRequested)
             {
                 var testObject = new TestObject()
@@ -90,9 +93,10 @@ namespace CFMessageQueue.TestClient
                     Content = testObject
                 };
 
-                Console.WriteLine($"Sending message {queueMessage.Id} to {messageQueue.Name}");
+                Console.WriteLine($"{_id}: Sending message {queueMessage.Id} to {messageQueue.Name}");
                 messageQueueClientConnector.SendAsync(queueMessage).Wait();
-                Console.WriteLine($"Sent message");
+                Console.WriteLine($"{_id}: Sent message");
+                countMessagesSent++;
 
                 // Delay before next send
                 var stopwatch2 = new Stopwatch();
@@ -103,7 +107,7 @@ namespace CFMessageQueue.TestClient
             messageHubClientConnector.Dispose();
             messageQueueClientConnector.Dispose();
 
-            Console.WriteLine("Producer has completed");
+            Console.WriteLine($"{_id}: Producer has completed (Sent {countMessagesSent} messages)");
         }           
     }
 }

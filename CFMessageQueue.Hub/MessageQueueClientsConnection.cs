@@ -32,6 +32,12 @@ namespace CFMessageQueue.Hub
         public delegate void ConnectionMessageReceived(ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo);
         public event ConnectionMessageReceived? OnConnectionMessageReceived;
 
+        public delegate void ClientConnected(EndpointInfo endpointInfo);
+        public event ClientConnected? OnClientConnected;
+
+        public delegate void ClientDisconnected(EndpointInfo endpointInfo);
+        public event ClientDisconnected? OnClientDisconnected;
+
         public MessageQueueClientsConnection(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
@@ -49,6 +55,22 @@ namespace CFMessageQueue.Hub
                     {
                         OnConnectionMessageReceived(connectionMessage, messageReceivedInfo);
                     }
+                }
+            };
+
+            _connection.OnClientConnected += delegate (EndpointInfo endpointInfo)
+            {
+                if (OnClientConnected != null)
+                {
+                    OnClientConnected(endpointInfo);
+                }
+            };
+
+            _connection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            {
+                if (OnClientDisconnected != null)
+                {
+                    OnClientDisconnected(endpointInfo);
                 }
             };
         }
@@ -94,6 +116,11 @@ namespace CFMessageQueue.Hub
         public void SendGetNextQueueMessageResponse(GetNextQueueMessageResponse response, EndpointInfo remoteEndpointInfo)
         {
             _connection.SendMessage(_messageConverterList.GetNextQueueMessageResponseConverter.GetConnectionMessage(response), remoteEndpointInfo);
+        }
+
+        public void SendGetQueueMessagesResponse(GetQueueMessagesResponse response, EndpointInfo remoteEndpointInfo)
+        {
+            _connection.SendMessage(_messageConverterList.GetQueueMessagesResponseConverter.GetConnectionMessage(response), remoteEndpointInfo);
         }
 
         public void SendMessageQueueSubscribeResponse(MessageQueueSubscribeResponse response, EndpointInfo remoteEndpointInfo)

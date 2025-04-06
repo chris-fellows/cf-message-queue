@@ -23,11 +23,17 @@ namespace CFMessageQueue.Constants
         public const string ExecuteMessageQueueActionRequest = "ExecuteMessageQueueActionRequest";
         public const string ExecuteMessageQueueActionResponse = "ExecuteMessageQueueActionResponse";
 
+        public const string GetMessageHubClientsRequest = "GetMessageHubClientsRequest";
+        public const string GetMessageHubClientsResponse = "GetMessageHubClientsResponse";
+
         public const string GetMessageHubsRequest = "GetMessageHubsRequest";
         public const string GetMessageHubsResponse = "GetMessageHubsResponse";
 
         public const string GetMessageQueuesRequest = "GetMessageQueuesRequest";
         public const string GetMessageQueuesResponse = "GetMessageQueuesResponse";
+
+        public const string GetQueueMessagesRequest = "GetQueueMessagesRequest";
+        public const string GetQueueMessagesResponse = "GetQueueMessagesRequest";
 
         public const string GetNextQueueMessageRequest = "GetNextQueueMessageRequest";
         public const string GetNextQueueMessageResponse = "GetNextQueueMessageResponse";

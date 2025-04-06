@@ -19,34 +19,69 @@ namespace CFMessageQueue.TestClient
     {
         public void Run(TimeSpan duration)
         {
-            var producerConfig = new ProducerConfig()
+            // Set producers
+            var producerConfigs = new List<ProducerConfig>()
             {
-                MessageQueueName = "ProducerConsumerQueue1",
-                AdminSecurityKey = SystemConfig.AdminSecurityKey,
-                DefaultSecurityKey = SystemConfig.Client1SecurityKey,
-                DelayBetweenSend = TimeSpan.FromSeconds(5),
-                HubEndpointInfo = SystemConfig.HubEndpointInfo,               
+                new ProducerConfig()
+                {
+                    MessageQueueName = "ProducerConsumerQueue1",
+                    AdminSecurityKey = SystemConfig.AdminSecurityKey,
+                    DefaultSecurityKey = SystemConfig.Client1SecurityKey,
+                    DelayBetweenSend = TimeSpan.FromMilliseconds(1000),
+                    HubEndpointInfo = SystemConfig.HubEndpointInfo,
+                    HubLocalPort = 10160,
+                    QueueLocalPort = 10161
+                }
             };
-            
-            var consumerConfig = new ConsumerConfig()
+
+            // Set consumers
+            var consumerConfigs = new List<ConsumerConfig>()
             {
-                MessageQueueName = "ProducerConsumerQueue1",
-                AdminSecurityKey = SystemConfig.AdminSecurityKey,
-                DefaultSecurityKey= SystemConfig.Client2SecurityKey,
-                DelayBetweenGetMessage = TimeSpan.FromSeconds(3),
-                HubEndpointInfo = SystemConfig.HubEndpointInfo
+                new ConsumerConfig()
+                {
+                    MessageQueueName = "ProducerConsumerQueue1",
+                    AdminSecurityKey = SystemConfig.AdminSecurityKey,
+                    DefaultSecurityKey = SystemConfig.Client2SecurityKey,
+                    DelayBetweenGetMessage = TimeSpan.FromMilliseconds(200),
+                    HubEndpointInfo = SystemConfig.HubEndpointInfo,
+                    HubLocalPort = 10170,
+                    QueueLocalPort = 10171
+                },
+                new ConsumerConfig()
+                {
+                    MessageQueueName = "ProducerConsumerQueue1",
+                    AdminSecurityKey = SystemConfig.AdminSecurityKey,
+                    DefaultSecurityKey = SystemConfig.Client3SecurityKey,
+                    DelayBetweenGetMessage = TimeSpan.FromMilliseconds(200),
+                    HubEndpointInfo = SystemConfig.HubEndpointInfo,
+                    HubLocalPort = 10180,
+                    QueueLocalPort = 10181
+                }
             };
+
+            var consumers = new List<Consumer>();
+            var producers =new List<Producer>();
 
             // Configure system
-            Configure(consumerConfig, producerConfig);
+            Configure(consumerConfigs, producerConfigs);
 
-            // Start producer
-            var producer = new Producer();
-            producer.Start(producerConfig);
+            // Start consumers
+            Console.WriteLine($"Starting {consumerConfigs.Count} consumers");
+            foreach (var consumerConfig in consumerConfigs)
+            {
+                var consumer = new Consumer();
+                consumers.Add(consumer);
+                consumer.Start(consumerConfig, "Consumer" + (consumerConfigs.IndexOf(consumerConfig) + 1).ToString());
+            }
 
-            // Start consumer
-            var consumer =new Consumer();
-            consumer.Start(consumerConfig);
+            // Start producers
+            Console.WriteLine($"Starting {producerConfigs.Count} producers");
+            foreach (var producerConfig in producerConfigs)
+            {
+                var producer = new Producer();
+                producers.Add(producer);
+                producer.Start(producerConfig, "Producer" + (producerConfigs.IndexOf(producerConfig) + 1).ToString());
+            }
 
             // Run for specific udration
             var stopwatch = new Stopwatch();
@@ -57,54 +92,58 @@ namespace CFMessageQueue.TestClient
             }
 
             // Stop producer & consumer
-            producer.Stop();
-            consumer.Stop();
+            Console.WriteLine("Stopping producers");
+            producers.ForEach(producer => producer.Stop());
+
+            Console.WriteLine("Stopping consumers");
+            consumers.ForEach(consumer => consumer.Stop());
         }
 
-        private void Configure(ConsumerConfig consumerConfig, ProducerConfig producerConfig)
-        { 
+        private void Configure(List<ConsumerConfig> consumerConfigs, List<ProducerConfig> producerConfigs)
+        {
+            Console.WriteLine("Configuring for producers and consumers");       
+
             // Default role types for queue functions
-            var defaultQueueRoleTypes = new List<RoleTypes>()
-            {
-                RoleTypes.ReadQueue,
-                RoleTypes.WriteQueue,
-                RoleTypes.SubscribeQueue
-            };
+            var defaultQueueRoleTypes = RoleTypeUtilities.DefaultNonAdminQueueClientRoleTypes;
 
             // Default role types for hub functions
-            var defaultHubRoleTypes = new List<RoleTypes>()
-            {
-                RoleTypes.GetMessageHubs,
-                RoleTypes.GetMessageQueues
-            };
+            var defaultHubRoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes;            
 
-            var messageHubClientConnectorAdmin = new MessageHubClientConnector(producerConfig.HubEndpointInfo,
-                                     producerConfig.AdminSecurityKey,
+            var messageHubClientConnectorAdmin = new MessageHubClientConnector(producerConfigs[0].HubEndpointInfo,
+                                     producerConfigs[0].AdminSecurityKey,
                                      NetworkUtilities.GetFreeLocalPort(SystemConfig.MinClientLocalPort, SystemConfig.MaxClientLocalPort, new()));
 
             // Create queue if not exists
             var messageQueues = messageHubClientConnectorAdmin.GetMessageQueuesAsync().Result;
-            var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == producerConfig.MessageQueueName);
+            var messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == producerConfigs[0].MessageQueueName);
             if (messageQueue == null)   // Queue not exists, create it
             {
                 // Create message quite (Must be Admin)
-                var messageQueueId = messageHubClientConnectorAdmin.AddMessageQueueAsync(producerConfig.MessageQueueName, 5, 1000000).Result;
+                var messageQueueId = messageHubClientConnectorAdmin.AddMessageQueueAsync(producerConfigs[0].MessageQueueName, 5, 1000000).Result;
 
                 // Get queue
                 messageQueues = messageHubClientConnectorAdmin.GetMessageQueuesAsync().Result;
-                messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == producerConfig.MessageQueueName);
+                messageQueue = messageQueues.FirstOrDefault(mq => mq.Name == producerConfigs[0].MessageQueueName);
             }
 
             // Clear queue (Must be Admin)
             messageHubClientConnectorAdmin.ClearMessageQueueAsync(messageQueue.Id).Wait();
 
             // Create producer client
-            var messageHubClientId1 = CreateMessageHubClient(messageHubClientConnectorAdmin, producerConfig.DefaultSecurityKey,
-                                        defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
+            foreach (var producerConfig in producerConfigs)
+            {
+                var messageHubClientId1 = CreateMessageHubClient(messageHubClientConnectorAdmin, producerConfig.DefaultSecurityKey,
+                                            defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
+            }
 
             // Create consumer client
-            var messageHubClientId2 = CreateMessageHubClient(messageHubClientConnectorAdmin, consumerConfig.DefaultSecurityKey, 
-                                        defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
+            foreach (var consumerConfig in consumerConfigs)
+            {
+                var messageHubClientId2 = CreateMessageHubClient(messageHubClientConnectorAdmin, consumerConfig.DefaultSecurityKey,
+                                            defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
+            }
+
+            Console.WriteLine("Configured for producers and consumers");
         }        
 
         /// <summary>
