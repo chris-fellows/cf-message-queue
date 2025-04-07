@@ -25,6 +25,7 @@ namespace CFMessageQueue.TestClient
                 new ProducerConfig()
                 {
                     MessageQueueName = "ProducerConsumerQueue1",
+                    ClientName = SystemConfig.Client1Name,
                     AdminSecurityKey = SystemConfig.AdminSecurityKey,
                     DefaultSecurityKey = SystemConfig.Client1SecurityKey,
                     DelayBetweenSend = TimeSpan.FromMilliseconds(200),
@@ -40,6 +41,7 @@ namespace CFMessageQueue.TestClient
                 new ConsumerConfig()
                 {
                     MessageQueueName = "ProducerConsumerQueue1",
+                    ClientName = SystemConfig.Client2Name,
                     AdminSecurityKey = SystemConfig.AdminSecurityKey,
                     DefaultSecurityKey = SystemConfig.Client2SecurityKey,
                     DelayBetweenGetMessage = TimeSpan.FromMilliseconds(200),
@@ -50,6 +52,7 @@ namespace CFMessageQueue.TestClient
                 new ConsumerConfig()
                 {
                     MessageQueueName = "ProducerConsumerQueue1",
+                    ClientName = SystemConfig.Client3Name,
                     AdminSecurityKey = SystemConfig.AdminSecurityKey,
                     DefaultSecurityKey = SystemConfig.Client3SecurityKey,
                     DelayBetweenGetMessage = TimeSpan.FromMilliseconds(200),
@@ -132,14 +135,14 @@ namespace CFMessageQueue.TestClient
             // Create producer client
             foreach (var producerConfig in producerConfigs)
             {
-                var messageHubClientId1 = CreateMessageHubClient(messageHubClientConnectorAdmin, producerConfig.DefaultSecurityKey,
+                var messageHubClientId1 = CreateMessageHubClient(messageHubClientConnectorAdmin, producerConfig.ClientName, producerConfig.DefaultSecurityKey,
                                             defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
             }
 
             // Create consumer client
             foreach (var consumerConfig in consumerConfigs)
             {
-                var messageHubClientId2 = CreateMessageHubClient(messageHubClientConnectorAdmin, consumerConfig.DefaultSecurityKey,
+                var messageHubClientId2 = CreateMessageHubClient(messageHubClientConnectorAdmin, consumerConfig.ClientName, consumerConfig.DefaultSecurityKey,
                                             defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueue.Id }).Result;
             }
 
@@ -156,13 +159,14 @@ namespace CFMessageQueue.TestClient
         /// <param name="messageQueueIds"></param>
         /// <returns></returns>
         private async Task<string> CreateMessageHubClient(IMessageHubClientConnector messageHubClientConnector,
+                                                string name,
                                                 string clientSecurityKey,
                                                 List<RoleTypes> hubRoleTypes,
                                                 List<RoleTypes> queueRoleTypes,
                                                 List<string> messageQueueIds)
         {
             // Create message hub client            
-            var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(clientSecurityKey);
+            var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(name, clientSecurityKey);
 
             // Configure hub level permissions            
             await messageHubClientConnector.ConfigureMessageHubClientAsync(messageHubClientId, hubRoleTypes);

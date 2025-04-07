@@ -11,6 +11,13 @@ namespace CFMessageQueue.TestClient.Models
     {
         public static EndpointInfo HubEndpointInfo { get; set; } = new EndpointInfo() { Ip = "192.168.1.45", Port = 10000 };
 
+
+        public static string Client1Name { get; set; } = "Client 1";
+
+        public static string Client2Name { get; set; } = "Client 2";
+
+        public static string Client3Name { get; set; } = "Client 3";
+
         public static string Client1SecurityKey { get; set; } = "0b38818c-4354-43f5-a750-a24378d2e3a8";
 
         public static string Client2SecurityKey { get; set; } = "6c3f7a9e-3ab8-428c-864a-b01c936bccf9";

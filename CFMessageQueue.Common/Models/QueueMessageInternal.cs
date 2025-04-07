@@ -30,6 +30,11 @@ namespace CFMessageQueue.Models
         public string MessageQueueId { get; set; } = String.Empty;
 
         /// <summary>
+        /// Message name (User friendly description)
+        /// </summary>
+        public string Name { get; set; } = String.Empty;
+
+        /// <summary>
         /// Created time
         /// </summary>
         public DateTimeOffset CreatedDateTime { get; set; }

@@ -9,6 +9,8 @@ namespace CFMessageQueue.Models
 {
     public class AddMessageHubClientRequest : MessageBase
     {
+        public string Name { get; set; } = String.Empty;
+
         public string ClientSecurityKey { get; set; } = String.Empty;
 
         public AddMessageHubClientRequest()

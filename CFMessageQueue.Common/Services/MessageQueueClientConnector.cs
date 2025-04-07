@@ -80,6 +80,7 @@ namespace CFMessageQueue.Services
                 CreatedDateTime = queueMessage.CreatedDateTime,
                 ExpirySeconds = queueMessage.ExpirySeconds,
                 MessageQueueId = queueMessage.MessageQueueId,
+                Name = queueMessage.Name,
                 SenderMessageHubClientId = queueMessage.SenderMessageHubClientId,
                 TypeId = queueMessage.TypeId                 
             };
@@ -103,6 +104,7 @@ namespace CFMessageQueue.Services
                 CreatedDateTime = queueMessageInternal.CreatedDateTime,
                 ExpirySeconds = queueMessageInternal.ExpirySeconds,
                 MessageQueueId = queueMessageInternal.MessageQueueId,
+                Name = queueMessageInternal.Name,
                 SenderMessageHubClientId = queueMessageInternal.SenderMessageHubClientId,
                 TypeId = queueMessageInternal.TypeId
             };

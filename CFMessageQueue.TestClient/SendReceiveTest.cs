@@ -45,11 +45,11 @@ namespace CFMessageQueue.TestClient
             //await messageHubClientConnectorAdmin.ConfigureMessageHubClientAsync(messageHubClientId, messageQueueId, queueRoleTypes);
 
             // Create client 1 with hub & queue permissions
-            var messageHubClientId1 = await CreateMessageHubClient(messageHubClientConnectorAdmin, SystemConfig.Client1SecurityKey,
+            var messageHubClientId1 = await CreateMessageHubClient(messageHubClientConnectorAdmin, SystemConfig.Client1Name, SystemConfig.Client1SecurityKey,
                                             defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueueId });
 
             // Create client 2 with hub & queue permissions
-            var messageHubClientId2 = await CreateMessageHubClient(messageHubClientConnectorAdmin, SystemConfig.Client2SecurityKey,
+            var messageHubClientId2 = await CreateMessageHubClient(messageHubClientConnectorAdmin, SystemConfig.Client2Name, SystemConfig.Client2SecurityKey,
                                             defaultHubRoleTypes, defaultQueueRoleTypes, new() { messageQueueId });
 
             // Clean up admin hub client connector so that we error below if we try and use the object
@@ -144,13 +144,14 @@ namespace CFMessageQueue.TestClient
         /// <param name="messageQueueIds"></param>
         /// <returns></returns>
         private async Task<string> CreateMessageHubClient(IMessageHubClientConnector messageHubClientConnector,
+                                                string name,
                                                 string clientSecurityKey,
                                                 List<RoleTypes> hubRoleTypes,
                                                 List<RoleTypes> queueRoleTypes,
                                                 List<string> messageQueueIds)
         {
             // Create message hub client            
-            var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(clientSecurityKey);
+            var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(name, clientSecurityKey);
 
             // Configure hub level permissions            
             await messageHubClientConnector.ConfigureMessageHubClientAsync(messageHubClientId, hubRoleTypes);

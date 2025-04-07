@@ -6,6 +6,8 @@ namespace CFMessageQueue.TestClient.Models
     {        
         public string MessageQueueName { get; set; } = String.Empty;
 
+        public string ClientName { get; set; } = String.Empty;
+
         public string DefaultSecurityKey { get; set; } = String.Empty;
 
         public string AdminSecurityKey { get; set; } = String.Empty;

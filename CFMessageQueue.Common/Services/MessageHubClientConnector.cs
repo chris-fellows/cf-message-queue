@@ -190,8 +190,12 @@ namespace CFMessageQueue.Services
             return Task.CompletedTask;
         }
 
-        public Task<string> AddMessageHubClientAsync(string securityKey)
+        public Task<string> AddMessageHubClientAsync(string name, string securityKey)
         {
+            if (String.IsNullOrEmpty(name))
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
             if (String.IsNullOrEmpty(securityKey))
             {
                 throw new ArgumentNullException(nameof(securityKey));
@@ -201,6 +205,7 @@ namespace CFMessageQueue.Services
             {
                 SecurityKey = _securityKey,
                 ClientSessionId = _clientSessionId,
+                Name = name,
                 ClientSecurityKey = securityKey
             };
 

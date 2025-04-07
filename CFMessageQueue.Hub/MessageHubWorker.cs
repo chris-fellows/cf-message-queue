@@ -456,6 +456,11 @@ namespace CFMessageQueue.Hub
                         response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                         response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                     }
+                    else if (String.IsNullOrEmpty(addMessageHubClientRequest.Name))
+                    {
+                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                    }
                     else if (!IsValidFormatSecurityKey(addMessageHubClientRequest.ClientSecurityKey))
                     {
                         response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
@@ -467,10 +472,19 @@ namespace CFMessageQueue.Hub
                         var isMessageHubClientForKey = (await messageHubClientService.GetAllAsync())
                                                 .Any(c => c.SecurityKey.ToLower() == addMessageHubClientRequest.ClientSecurityKey.ToLower());
 
+                        // Check if name is used already
+                        var isMessageHubClientForName = (await messageHubClientService.GetAllAsync())
+                                               .Any(c => c.Name.ToLower() == addMessageHubClientRequest.Name.ToLower());
+
                         if (isMessageHubClientForKey)
                         {
                             response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
                             response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Security Key must be unique";
+                        }
+                        else if (isMessageHubClientForName)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Name must be unique";
                         }
                         else
                         {
@@ -478,6 +492,7 @@ namespace CFMessageQueue.Hub
                             var newMessageHubClient = new MessageHubClient()
                             {
                                 Id = Guid.NewGuid().ToString(),
+                                Name = addMessageHubClientRequest.Name,
                                 SecurityKey = addMessageHubClientRequest.ClientSecurityKey
                             };
                             await messageHubClientService.AddAsync(newMessageHubClient);
@@ -491,7 +506,7 @@ namespace CFMessageQueue.Hub
                             queueMessageHub.SecurityItems.Add(new SecurityItem()
                             {
                                 MessageHubClientId = newMessageHubClient.Id,
-                                RoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes                                
+                                RoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes
                             });
                             await queueMessageHubService.UpdateAsync(queueMessageHub);
 

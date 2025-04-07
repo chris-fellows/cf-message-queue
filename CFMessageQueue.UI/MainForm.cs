@@ -3,6 +3,7 @@ using CFMessageQueue;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
 using CFMessageQueue.Services;
+using CFMessageQueue.UI.UserControls;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -17,6 +18,7 @@ namespace CFMessageQueue.UI
         {
             MessageHubClient,
             MessageQueue,
+            MessageQueueMessages,
             Unknown               
         }
 
@@ -29,7 +31,7 @@ namespace CFMessageQueue.UI
         {
             InitializeComponent();
 
-            this.Text = $"CF Message Queue - [{remoteEndpoint.Ip}:{remoteEndpoint.Port}]";
+            this.Text = $"CF Message Queue - [Hub {remoteEndpoint.Ip}:{remoteEndpoint.Port}]";
 
             _messageHubClientConnector = new MessageHubClientConnector(remoteEndpoint, securityKey, 10080);
             _messageQueueClientConnector = new MessageQueueClientConnector(securityKey, 10081);
@@ -48,7 +50,8 @@ namespace CFMessageQueue.UI
         private MyNodeTypes GetNodeType(TreeNode treeNode)
         {
             if (treeNode.Name.StartsWith("Client.")) return MyNodeTypes.MessageHubClient;
-            if (treeNode.Name.StartsWith("Queue.")) return MyNodeTypes.MessageQueue;            
+            if (treeNode.Name.StartsWith("Queue.")) return MyNodeTypes.MessageQueue;
+            if (treeNode.Name.StartsWith("QueueMessages.")) return MyNodeTypes.MessageQueueMessages;
 
             return MyNodeTypes.Unknown;
         }
@@ -64,115 +67,95 @@ namespace CFMessageQueue.UI
 
 
             var nodeQueues = tvwNodes.Nodes.Add("Queues", "Queues");
-            foreach (var messageQueue in messageQueues)
+            foreach (var messageQueue in messageQueues.OrderBy(q => q.Name))
             {
                 var nodeQueue = nodeQueues.Nodes.Add($"Queue.{messageQueue.Id}", messageQueue.Name);
                 nodeQueue.Tag = messageQueue;
+
+                var nodeQueueMessages = nodeQueue.Nodes.Add($"QueueMessages.{messageQueue.Id}", "Messages");
+                nodeQueueMessages.Tag = messageQueue;
+
             }
-            nodeQueues.Expand();
+            nodeQueues.ExpandAll();
 
             // Display clients
             var messageHubClients = await _messageHubClientConnector.GetMessageHubClientsAsync();
 
             var nodeClients = tvwNodes.Nodes.Add("Clients", "Clients");           
-            foreach(var messageHubClient in messageHubClients)
+            foreach(var messageHubClient in messageHubClients.OrderBy(c => c.Name))
             {
-                var nodeClient = nodeClients.Nodes.Add($"Client.{messageHubClient.Id}", messageHubClient.Id);
+                var nodeClient = nodeClients.Nodes.Add($"Client.{messageHubClient.Id}", messageHubClient.Name);
                 nodeClient.Tag = messageHubClient;
             }
-            nodeClients.Expand();
+            nodeClients.ExpandAll();
         }
 
         private void MainForm_Load(object sender, EventArgs e)
         {
             RefreshTreeView().Wait();
-        }
-
-        private void tscbQueue_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            //DisplayQueueMessagesQueue((MessageQueue)tscbQueue.SelectedItem, 100, 1);
-        }
-
-        /// <summary>
-        /// Display queue messages for page
-        /// </summary>
-        /// <param name="messageQueue"></param>
-        /// <param name="pageItems"></param>
-        /// <param name="page"></param>
-        /// <returns></returns>
-        private async Task DisplayQueueMessagesQueue(MessageQueue messageQueue, int pageItems, int page)
-        {
-            // Set message queue
-            if (_messageQueueClientConnector != messageQueue)
-            {
-                _messageQueueClientConnector.MessageQueue = messageQueue;
-            }
-
-            // Get messages
-            var queueMessages = await _messageQueueClientConnector.GetQueueMessages(pageItems, page);
-
-            // Display messages
-            dgvQueueMessage.Rows.Clear();
-            dgvQueueMessage.Columns.Clear();
-            int columnIndex = dgvQueueMessage.Columns.Add("Id", "Id");
-            columnIndex = dgvQueueMessage.Columns.Add("Type", "Type");
-            columnIndex = dgvQueueMessage.Columns.Add("Created", "Created");
-            columnIndex = dgvQueueMessage.Columns.Add("Expiry", "Expiry");
-            columnIndex = dgvQueueMessage.Columns.Add("Client Id", "Client Id");
-
-            foreach (var queueMessage in queueMessages)
-            {
-                dgvQueueMessage.Rows.Add(CreateQueueMessageRow(queueMessage));
-            }
-        }
-
-        private DataGridViewRow CreateQueueMessageRow(QueueMessage queueMessage)
-        {
-            var row = new DataGridViewRow();
-
-            using (var cell = new DataGridViewTextBoxCell())
-            {
-                cell.Value = queueMessage.Id;
-                row.Cells.Add(cell);
-            }
-
-            using (var cell = new DataGridViewTextBoxCell())
-            {
-                cell.Value = queueMessage.TypeId;
-                row.Cells.Add(cell);
-            }
-
-            using (var cell = new DataGridViewTextBoxCell())
-            {
-                cell.Value = queueMessage.CreatedDateTime.ToString();
-                row.Cells.Add(cell);
-            }
-
-            using (var cell = new DataGridViewTextBoxCell())
-            {
-                cell.Value = queueMessage.ExpirySeconds.ToString();
-                row.Cells.Add(cell);
-            }
-
-            using (var cell = new DataGridViewTextBoxCell())
-            {
-                cell.Value = queueMessage.SenderMessageHubClientId.ToString();
-                row.Cells.Add(cell);
-            }
-
-            return row;
-        }
-
+        }      
+     
         private void tvwNodes_AfterSelect(object sender, TreeViewEventArgs e)
         {
             switch(GetNodeType(e.Node))
             {
-                case MyNodeTypes.MessageQueue:
-                    var messageQueue = (MessageQueue)e.Node.Tag;
+                case MyNodeTypes.MessageHubClient:
+                    DisplayControl((MessageHubClient)e.Node.Tag);
+                    break;
 
-                    DisplayQueueMessagesQueue(messageQueue, 100, 1);
+                case MyNodeTypes.MessageQueue:
+                    DisplayControl((MessageQueue)e.Node.Tag);
+                    break;
+
+                case MyNodeTypes.MessageQueueMessages:
+                    DisplayControl((MessageQueue)e.Node.Tag, 0);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Displays control for MessageHubClient
+        /// </summary>
+        /// <param name="messageHubClient"></param>
+        private void DisplayControl(MessageHubClient messageHubClient)
+        {
+            splitContainer1.Panel2.Controls.Clear();
+
+            var control = new MessageHubClientControl(_messageHubClientConnector, _messageQueueClientConnector);            
+            control.Dock = DockStyle.Fill;
+            splitContainer1.Panel2.Controls.Add(control);
+
+            control.ModelToView(messageHubClient);
+        }
+
+        /// <summary>
+        /// Displays control for MessageQueue
+        /// </summary>
+        /// <param name="messageQueue"></param>
+        private void DisplayControl(MessageQueue messageQueue)
+        {
+            splitContainer1.Panel2.Controls.Clear();
+
+            var control = new MessageQueueControl(_messageHubClientConnector, _messageQueueClientConnector);            
+            control.Dock = DockStyle.Fill;
+            splitContainer1.Panel2.Controls.Add(control);
+
+            control.ModelToView(messageQueue);
+        }
+
+        /// <summary>
+        /// Displays control for MessageQueue messages
+        /// </summary>
+        /// <param name="messageQueue"></param>
+        private void DisplayControl(MessageQueue messageQueue, int xxx)
+        {
+            splitContainer1.Panel2.Controls.Clear();
+
+            var control = new QueueMessagesControl(_messageHubClientConnector, _messageQueueClientConnector);
+            control.Dock = DockStyle.Fill;
+            splitContainer1.Panel2.Controls.Add(control);
+
+            control.ModelToView(messageQueue);
         }
     }
 }

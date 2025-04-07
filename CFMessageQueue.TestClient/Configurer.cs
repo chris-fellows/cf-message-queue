@@ -27,7 +27,7 @@ namespace CFMessageQueue.TestClient
             }
         }     
 
-        public async Task<string> CreateMessageHubClientAsync(EndpointInfo hubEndpointInfo, string messageQueueId, string clientSecurityKey, int localPort)
+        public async Task<string> CreateMessageHubClientAsync(EndpointInfo hubEndpointInfo, string messageQueueId, string name, string clientSecurityKey, int localPort)
         {            
             //var adminSecurityKey = "5005db05-35eb-4471-bd05-7883b746b196";
             //var defaultSecurityKey = "0b38818c-4354-43f5-a750-a24378d2e3a8";
@@ -49,7 +49,7 @@ namespace CFMessageQueue.TestClient
                 // Create message hub clients
 
                 // Create message hub client            
-                var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(clientSecurityKey);
+                var messageHubClientId = await messageHubClientConnector.AddMessageHubClientAsync(name, clientSecurityKey);
 
                 // Configure hub client for specific queue
                 await messageHubClientConnector.ConfigureMessageHubClientAsync(messageHubClientId, messageQueueId,

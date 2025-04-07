@@ -29,6 +29,8 @@ namespace CFMessageQueue.TestClient
                     Id = Guid.NewGuid().ToString(),
                     CreatedDateTime = DateTimeOffset.UtcNow,
                     TypeId = "TestMessage1",
+                    Name = "My Test Message",
+                    ExpirySeconds = 3600 * 24 * 7,
                     Content = testObject
                     //ContentType = testObject.GetType().AssemblyQualifiedName,
                     //Content = contentSerializer.Serialize(testObject, testObject.GetType())

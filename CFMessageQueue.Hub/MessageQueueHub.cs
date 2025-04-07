@@ -45,6 +45,7 @@ namespace CFMessageQueue.Hub
                 adminMessageHubClient = new MessageHubClient()
                 {
                     Id = Guid.NewGuid().ToString(),
+                    Name = "Hub Admin",
                     SecurityKey = _systemConfig.AdminSecurityKey
                 };
                 messageHubClientService.AddAsync(adminMessageHubClient).Wait();

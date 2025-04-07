@@ -72,7 +72,7 @@ namespace CFMessageQueue.TestClient
             messageQueueClientConnector.MessageQueue = messageQueue;
 
             // Run until cancelled
-            int countMessagesSent = 0;
+            int countMessagesSent = 0;            
             while (!cancellationToken.IsCancellationRequested)
             {
                 var testObject = new TestObject()
@@ -90,6 +90,8 @@ namespace CFMessageQueue.TestClient
                     Id = Guid.NewGuid().ToString(),
                     CreatedDateTime = DateTimeOffset.UtcNow,                    
                     TypeId = "Test1",
+                    ExpirySeconds = 3600 * 24 * 7,
+                    Name = $"Message {countMessagesSent + 1}",
                     Content = testObject
                 };
 

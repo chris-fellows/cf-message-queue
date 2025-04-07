@@ -66,7 +66,7 @@ namespace CFMessageQueue.Interfaces
         /// </summary>
         /// <param name="securityKey">Security key</param>
         /// <returns>Message Hub Client Id</returns>
-        Task<string> AddMessageHubClientAsync(string securityKey);
+        Task<string> AddMessageHubClientAsync(string name, string securityKey);
 
         /// <summary>
         /// Gets all message hub clients
