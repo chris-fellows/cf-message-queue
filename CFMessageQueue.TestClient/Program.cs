@@ -1,13 +1,4 @@
-﻿using CFConnectionMessaging.Models;
-using CFMessageQueue.Enums;
-using CFMessageQueue.Interfaces;
-using CFMessageQueue.Models;
-using CFMessageQueue.Services;
-using CFMessageQueue.TestClient;
-using CFMessageQueue.TestClient.Models;
-using CFMessageQueue.Utilities;
-using System.Diagnostics;
-using System.Net;
+﻿using CFMessageQueue.TestClient;
 
 //var oldObject = new MessageHubClient()
 //{
@@ -38,6 +29,9 @@ Console.WriteLine("Starting CF Message Queue Test Client");
 //new SendReceiveTest().Run();
 
 // Run producer consumer test
-new ProducerConsumerTest().Run(TimeSpan.FromSeconds(60));
+//new ProducerConsumerTest().Run(TimeSpan.FromSeconds(60));
+
+// Run producer test
+new ProducerTest().Run(TimeSpan.FromSeconds(60));
 
 Console.WriteLine("Terminating CF Message Queue Test Client");

@@ -505,6 +505,7 @@ namespace CFMessageQueue.Hub
                             var queueMessageHub = await queueMessageHubService.GetByIdAsync(_queueMessageHub.Id);
                             queueMessageHub.SecurityItems.Add(new SecurityItem()
                             {
+                                Id = Guid.NewGuid().ToString(),
                                 MessageHubClientId = newMessageHubClient.Id,
                                 RoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes
                             });
@@ -730,6 +731,7 @@ namespace CFMessageQueue.Hub
                                 {
                                     securityItemEdit = new SecurityItem()
                                     {
+                                        Id = Guid.NewGuid().ToString(),
                                         MessageHubClientId = messageHubClientEdit.Id,
                                         RoleTypes = configureMessageHubClientRequest.RoleTypes
                                     };
@@ -767,6 +769,7 @@ namespace CFMessageQueue.Hub
                                 {
                                     securityItemEdit = new SecurityItem()
                                     {
+                                        Id = Guid.NewGuid().ToString(),
                                         MessageHubClientId = messageHubClientEdit.Id,
                                         RoleTypes = configureMessageHubClientRequest.RoleTypes
                                     };
@@ -875,6 +878,7 @@ namespace CFMessageQueue.Hub
                                 {
                                     messageQueue.SecurityItems.Add(new SecurityItem()
                                     {
+                                        Id = Guid.NewGuid().ToString(),                                       
                                         MessageHubClientId = currentSecurityItem.MessageHubClientId,
                                         RoleTypes = RoleTypeUtilities.DefaultAdminQueueClientRoleTypes
                                     });

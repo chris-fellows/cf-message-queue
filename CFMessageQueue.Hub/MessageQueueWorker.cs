@@ -144,6 +144,8 @@ namespace CFMessageQueue.Hub
             {
                 _timer.Enabled = false;
 
+                CheckCompleteQueueItemTasks(_queueItemTasks);
+
                 // Check if need to expire messages
                 if (_lastExpireOldMessages.Add(_expireOldMessagesFrequency) <= DateTimeOffset.UtcNow &&
                     !_queueItems.Any(q => q.ItemType == QueueItemTypes.ExpireOldQueueMessages)) 
@@ -387,9 +389,9 @@ namespace CFMessageQueue.Hub
                                 Sequence = 1
                             },
                         };
-
-                        var messageHubClient = GetMessageHubClientBySecurityKey(addQueueMessageRequest.SecurityKey, messageHubClientService);                        
-
+                        
+                        var messageHubClient = GetMessageHubClientBySecurityKey(addQueueMessageRequest.SecurityKey, messageHubClientService);
+                        
                         var messageQueue = await messageQueueService.GetByIdAsync(addQueueMessageRequest.MessageQueueId);
 
                         var securityItem = (messageQueue == null || messageHubClient == null) ? 
@@ -411,7 +413,7 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                         }
                         else
-                        {
+                        {                            
                             isHasMutex = _queueMutex.WaitOne();
 
                             // Check if queue is full
@@ -423,7 +425,7 @@ namespace CFMessageQueue.Hub
 
                                 isQueueFull = messageCount >= messageQueue.MaxSize;
                             }
-
+                            
                             if (isQueueFull)
                             {
                                 response.Response.ErrorCode = ResponseErrorCodes.MessageQueueFull;
@@ -431,14 +433,13 @@ namespace CFMessageQueue.Hub
                             }
                             else
                             {
-
                                 // Set message queue
                                 addQueueMessageRequest.QueueMessage.MessageQueueId = _messageQueue.Id;
-
+                                
                                 // Set the sender
                                 addQueueMessageRequest.QueueMessage.SenderMessageHubClientId = messageHubClient.Id;
 
-                                await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);
+                                await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);                                
 
                                 // If client subscription indicates waiting for new message then flag notification
                                 _clientQueueSubscriptions.Where(s => s.NotifyIfMessageAdded).ToList()
@@ -446,14 +447,14 @@ namespace CFMessageQueue.Hub
                                         {
                                             s.DoNotifyMessageAdded = true;
                                             s.NotifyIfMessageAdded = false;
-                                        });
+                                        });                                
                             }
                         }
-
+                        
                         // Send response
-                        _messageQueueClientsConnection.SendAddQueueMessageResponse(response, messageReceivedInfo.RemoteEndpointInfo);
+                        _messageQueueClientsConnection.SendAddQueueMessageResponse(response, messageReceivedInfo.RemoteEndpointInfo);                        
                     }
-                }
+                }                
                 finally
                 {
                     if (isHasMutex) _queueMutex.ReleaseMutex();
@@ -942,13 +943,9 @@ namespace CFMessageQueue.Hub
 
         private void ProcessCompletedQueueItemTask(QueueItemTask queueItemTask)
         {
-            if (queueItemTask.Task.Exception == null)
+            if (queueItemTask.Task.Exception != null)                        
             {
-                Console.WriteLine($"Processing task {queueItemTask.QueueItem.ItemType}");
-            }
-            else
-            {
-                Console.WriteLine($"Error processing task {queueItemTask.QueueItem.ItemType}: {queueItemTask.Task.Exception.Message}");
+                _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing task {queueItemTask.QueueItem.ItemType}: {queueItemTask.Task.Exception.Message}");
             }
         }
 

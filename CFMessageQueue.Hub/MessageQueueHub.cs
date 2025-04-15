@@ -195,6 +195,7 @@ namespace CFMessageQueue.Hub
                     // Add default security item for managing admin functions
                     new SecurityItem()
                     {
+                        Id = Guid.NewGuid().ToString(),
                         MessageHubClientId = adminMessageHubClient.Id,
                         RoleTypes = RoleTypeUtilities.DefaultAdminHubClientRoleTypes
                     }

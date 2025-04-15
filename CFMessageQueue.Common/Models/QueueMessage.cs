@@ -1,30 +1,37 @@
-﻿namespace CFMessageQueue.Models
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace CFMessageQueue.Models
 {
     /// <summary>
     /// Queue messaage (External format)
     /// </summary>    
     public class QueueMessage
     {
+        [MaxLength(50)]
         public string Id { get; set; } = String.Empty;
 
         /// <summary>
         /// Message type
         /// </summary>
+        [MaxLength(50)]
         public string TypeId { get; set; } = String.Empty;
 
         /// <summary>
         /// Sender message hub client. Does not need to be set by client, will be set by hub.
         /// </summary>
+        [MaxLength(50)]
         public string SenderMessageHubClientId { get; set; } = String.Empty;
 
         /// <summary>
         /// Message queue. Does not need to be set by client, will be set by hub.
         /// </summary>
+        [MaxLength(50)]
         public string MessageQueueId { get; set; } = String.Empty;
 
         /// <summary>
         /// Message name (User friendly description)
         /// </summary>
+        [MaxLength(100)]
         public string Name { get; set; } = String.Empty;
 
         /// <summary>

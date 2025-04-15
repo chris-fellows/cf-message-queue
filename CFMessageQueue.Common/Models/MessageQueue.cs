@@ -1,4 +1,6 @@
-﻿namespace CFMessageQueue.Models
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace CFMessageQueue.Models
 {
     /// <summary>
     /// Message queue
@@ -13,11 +15,13 @@
         /// <summary>
         /// Queue name
         /// </summary>
+        [MaxLength(100)]
         public string Name { get; set; } = String.Empty;
 
         /// <summary>
         /// Queue IP
         /// </summary>
+        [MaxLength(10)]
         public string Ip { get; set; } = String.Empty;
 
         /// <summary>
