@@ -1,4 +1,4 @@
-# cf-message-queue
+﻿# cf-message-queue
 
 Message queuing mechanism. System comprises of a number of hubs that contain message queues. Clients
 send messages to specific queues and other clients can access those messages.
@@ -15,6 +15,17 @@ which client that it is.
 Hub clients use the following classes to communicate with the hub:
 - MessageHubClientConnector : Hub level actions. E.g. Create queue, get queue list.
 - MessageQueueClientConnector : Queue levelactions. E.g. Add message, get next message.
+
+Message Properties
+------------------
+Id (String): 			Unique Id.
+TypeId (String):		Message type. E.g. "CustomerOrder".
+Name (String):			Free format text for diagnostics.
+Priority (Integer)		Priority for processing (0=Highest, 100=Lowest). Normal messages should be sent with
+						a non-zero priority so that a higher priority message can be forced to the front of
+						the queue.
+ExpirySeconds (Integer):Time before message must be processed otherwise it is discarded (0=Infinite)
+Content (Object):		Object to send.
 
 Producing Messages
 ------------------
@@ -78,7 +89,3 @@ clients.
 Message Expiry
 --------------
 If a message has the expiry set then it will be automatically deleted when the timeout is reached.
-
-
-
-

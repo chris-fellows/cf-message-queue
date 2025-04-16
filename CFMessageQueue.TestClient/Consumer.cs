@@ -72,7 +72,7 @@ namespace CFMessageQueue.TestClient
             while (!cancellationToken.IsCancellationRequested)
             {
                 Console.WriteLine($"{_id}: Getting next message from queue {messageQueue.Name}"); ;
-                var queueMessage = messageQueueClientConnector.GetNextAsync(TimeSpan.Zero).Result;
+                var queueMessage = messageQueueClientConnector.GetNextAsync(TimeSpan.Zero, TimeSpan.FromSeconds(300)).Result;
 
                 if (queueMessage == null)
                 {

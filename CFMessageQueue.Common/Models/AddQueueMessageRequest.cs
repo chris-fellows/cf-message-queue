@@ -3,8 +3,8 @@
 namespace CFMessageQueue.Models
 {
     public class AddQueueMessageRequest : MessageBase
-    {
-        public QueueMessageInternal QueueMessage { get; set; }
+    {        
+        public NewQueueMessageInternal QueueMessage { get; set; }
 
         public string MessageQueueId { get; set; } = String.Empty;
 

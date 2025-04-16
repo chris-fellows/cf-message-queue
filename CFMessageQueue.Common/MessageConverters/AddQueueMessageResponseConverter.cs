@@ -26,7 +26,12 @@ namespace CFMessageQueue.MessageConverters
                         Value = externalMessage.Response == null ? "" :
                                     JsonUtilities.SerializeToBase64String(externalMessage.Response,
                                             JsonUtilities.DefaultJsonSerializerOptions)
-                    }                
+                    },
+                   new ConnectionMessageParameter()
+                   {
+                       Name = "QueueMessageId",
+                       Value = externalMessage.QueueMessageId
+                   }
                 }
             };
             return connectionMessage;
@@ -36,7 +41,8 @@ namespace CFMessageQueue.MessageConverters
         {
             var externalMessage = new AddQueueMessageResponse()
             {
-                Id = connectionMessage.Id                
+                Id = connectionMessage.Id,
+                QueueMessageId = connectionMessage.Parameters.First(p => p.Name == "QueueMessageId").Value                
             };
 
             // Get response

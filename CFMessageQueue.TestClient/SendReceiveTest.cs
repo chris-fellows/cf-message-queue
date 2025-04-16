@@ -102,7 +102,7 @@ namespace CFMessageQueue.TestClient
 
             // Test getting message
             Console.WriteLine("Getting next message from queue");
-            var queueMessage = messageQueueClientConnector1.GetNextAsync(TimeSpan.Zero);
+            var queueMessage = messageQueueClientConnector1.GetNextAsync(TimeSpan.Zero, TimeSpan.FromSeconds(300));
 
             if (queueMessage == null)
             {
@@ -177,12 +177,10 @@ namespace CFMessageQueue.TestClient
                 Int64Value = 29383837474
             };
 
-            var queueMessage = new QueueMessage()
-            {
-                Id = Guid.NewGuid().ToString(),
-                CreatedDateTime = DateTimeOffset.UtcNow,
+            var queueMessage = new NewQueueMessage()
+            {                
                 TypeId = "TestMessage1",
-                Content = testObject
+                Content = testObject                 
                 //ContentType = testObject.GetType().AssemblyQualifiedName,
                 //Content = contentSerializer.Serialize(testObject, testObject.GetType())
             };

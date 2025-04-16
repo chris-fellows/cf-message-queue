@@ -18,7 +18,7 @@ namespace CFMessageQueue.Interfaces
         /// <param name="message"></param>
         /// <param name="messageQueue"></param>
         /// <returns></returns>
-        Task SendAsync(QueueMessage message);
+        Task SendAsync(NewQueueMessage message);
 
         /// <summary>
         /// Gets next message from queue. If no message then can wait until the max wait if set.
@@ -26,8 +26,9 @@ namespace CFMessageQueue.Interfaces
         /// Caller should subsequently call SetProcessed to indicate if the message was processed or not.
         /// </summary>
         /// <param name="maxWait">Max time to wait for message: 0=Don't wait</param>
+        /// <param name="maxProcessingTime">Max processing time after which processing is aborted</param>
         /// <returns></returns>
-        Task<QueueMessage?> GetNextAsync(TimeSpan maxWait);
+        Task<QueueMessage?> GetNextAsync(TimeSpan maxWait, TimeSpan maxProcessingTime);
 
         /// <summary>
         /// Sets message as processed or not. Expected to have previously called GetNextAsync.

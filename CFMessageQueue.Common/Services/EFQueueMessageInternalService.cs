@@ -1,4 +1,5 @@
 ﻿using CFMessageQueue.Data;
+using CFMessageQueue.Enums;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +80,16 @@ namespace CFMessageQueue.Services
         {
             return await Context.QueueMessageInternal
                 .Where(i => i.MessageQueueId == messageQueueId).ToListAsync();                        
+        }
+
+        public async Task<QueueMessageInternal?> GetNextAsync(string messageQueueId)
+        {
+            return await Context.QueueMessageInternal                    
+                    .Where(m => m.MessageQueueId == messageQueueId &&
+                        m.Status == QueueMessageStatuses.Default &&
+                        (m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow))
+                    .OrderBy(m => m.Priority)
+                    .ThenBy(m => m.CreatedDateTime).FirstOrDefaultAsync();                                        
         }
     }
 }

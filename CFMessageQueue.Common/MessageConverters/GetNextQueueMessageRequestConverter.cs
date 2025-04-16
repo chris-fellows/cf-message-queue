@@ -42,8 +42,8 @@ namespace CFMessageQueue.MessageConverters
                    },
                           new ConnectionMessageParameter()
                    {
-                       Name = "MaxProcessingMilliseconds",
-                       Value = externalMessage.MaxProcessingMilliseconds.ToString()
+                       Name = "MaxProcessingSeconds",
+                       Value = externalMessage.MaxProcessingSeconds.ToString()
                    },
                 }
             };
@@ -59,7 +59,7 @@ namespace CFMessageQueue.MessageConverters
                 ClientSessionId = connectionMessage.Parameters.First(p => p.Name == "ClientSessionId").Value,
                 MessageQueueId = connectionMessage.Parameters.First(p => p.Name == "MessageQueueId").Value,
                 MaxWaitMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxWaitMilliseconds").Value),
-                MaxProcessingMilliseconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxProcessingMilliseconds").Value)
+                MaxProcessingSeconds = Convert.ToInt32(connectionMessage.Parameters.First(p => p.Name == "MaxProcessingSeconds").Value)
             };   
 
             return externalMessage;

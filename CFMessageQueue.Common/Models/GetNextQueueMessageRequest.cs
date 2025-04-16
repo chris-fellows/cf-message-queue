@@ -13,7 +13,7 @@ namespace CFMessageQueue.Models
 
         public int MaxWaitMilliseconds { get; set; }
 
-        public int MaxProcessingMilliseconds { get; set; }
+        public int MaxProcessingSeconds { get; set; }
 
         public GetNextQueueMessageRequest()
         {

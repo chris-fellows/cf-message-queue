@@ -20,7 +20,7 @@
 //var ipAddresses = hostEntry.AddressList.Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToList();
 //var ipAddress = hostEntry.AddressList[0].ToString();
 
-var id = Guid.NewGuid().ToString();
+//var id = Guid.NewGuid().ToString();
 
 // See https://aka.ms/new-console-template for more information
 Console.WriteLine("Starting CF Message Queue Test Client");

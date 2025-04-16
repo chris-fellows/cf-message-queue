@@ -80,8 +80,10 @@ namespace CFMessageQueue.UI.UserControls
             dgvQueueMessage.Columns[columnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             columnIndex = dgvQueueMessage.Columns.Add("Type", "Type");
             dgvQueueMessage.Columns[columnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-            columnIndex = dgvQueueMessage.Columns.Add("Created", "Created");
+            columnIndex = dgvQueueMessage.Columns.Add("Priority", "Priority");
             dgvQueueMessage.Columns[columnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
+            columnIndex = dgvQueueMessage.Columns.Add("Created", "Created");
+            dgvQueueMessage.Columns[columnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;            
             columnIndex = dgvQueueMessage.Columns.Add("Name", "Name");
             dgvQueueMessage.Columns[columnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             columnIndex = dgvQueueMessage.Columns.Add("Expiry (Secs)", "Expiry (Secs)");
@@ -114,6 +116,12 @@ namespace CFMessageQueue.UI.UserControls
             using (var cell = new DataGridViewTextBoxCell())
             {
                 cell.Value = queueMessage.TypeId;
+                row.Cells.Add(cell);
+            }
+
+            using (var cell = new DataGridViewTextBoxCell())
+            {
+                cell.Value = queueMessage.Priority;
                 row.Cells.Add(cell);
             }
 

@@ -85,17 +85,16 @@ namespace CFMessageQueue.TestClient
                 };
 
                 // Send message
-                var queueMessage = new QueueMessage()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    CreatedDateTime = DateTimeOffset.UtcNow,                    
+                var queueMessage = new NewQueueMessage()
+                {                                        
                     TypeId = "Test1",
                     ExpirySeconds = 3600 * 24 * 7,
                     Name = $"Message {countMessagesSent + 1}",
+                    Priority = 50,   
                     Content = testObject
                 };
 
-                Console.WriteLine($"{_id}: Sending message {queueMessage.Id} to {messageQueue.Name}");
+                Console.WriteLine($"{_id}: Sending message {queueMessage.Name} to {messageQueue.Name}");
                 messageQueueClientConnector.SendAsync(queueMessage).Wait();
                 Console.WriteLine($"{_id}: Sent message");
                 countMessagesSent++;

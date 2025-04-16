@@ -24,16 +24,13 @@ namespace CFMessageQueue.TestClient
                     Int64Value = 29383837474
                 };
 
-                var queueMessage = new QueueMessage()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    CreatedDateTime = DateTimeOffset.UtcNow,
+                var queueMessage = new NewQueueMessage()
+                {                    
                     TypeId = "TestMessage1",
                     Name = "My Test Message",
                     ExpirySeconds = 3600 * 24 * 7,
-                    Content = testObject
-                    //ContentType = testObject.GetType().AssemblyQualifiedName,
-                    //Content = contentSerializer.Serialize(testObject, testObject.GetType())
+                    Priority = 50,
+                    Content = testObject                 
                 };
 
                 await messageQueueClientConnector.SendAsync(queueMessage);
@@ -49,7 +46,7 @@ namespace CFMessageQueue.TestClient
                 // Set current message queue
                 messageQueueClientConnector.MessageQueue = messageQueue;
 
-                var queueMessage = await messageQueueClientConnector.GetNextAsync(TimeSpan.Zero);
+                var queueMessage = await messageQueueClientConnector.GetNextAsync(TimeSpan.Zero, TimeSpan.FromSeconds(300));
 
                 //if (queueMessage != null)
                 //{                    

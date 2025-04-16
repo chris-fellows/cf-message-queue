@@ -1,17 +1,14 @@
 ﻿using CFMessageQueue.Enums;
-using System;
-using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CFMessageQueue.Models
 {
     /// <summary>
     /// Queue message (Internal format with serialized body)
     /// </summary>
+    [Index(nameof(MessageQueueId), nameof(Priority), nameof(CreatedDateTime))]      // Used by IQueueMessageInternal.GetNextAsync
     public class QueueMessageInternal
     {
         [MaxLength(50)]
@@ -22,6 +19,12 @@ namespace CFMessageQueue.Models
         /// </summary>
         [MaxLength(50)]
         public string TypeId { get; set; } = String.Empty;
+
+        /// <summary>
+        /// Message priority for processing
+        /// </summary>
+        [Range(0, 100)]
+        public short Priority { get; set; }
 
         /// <summary>
         /// Sender message hub client. Does not need to be set by client, will be set by hub.
@@ -66,8 +69,15 @@ namespace CFMessageQueue.Models
 
         public MessageHubClient? ProcessingMessageHubClient { get; set; }
 
-        public int MaxProcessingMilliseconds { get; set; }
+        /// <summary>
+        /// Max time allowed for processing after which processing is cancelled and Status is reset
+        /// </summary>
+        [Range(0, Int32.MaxValue)]
+        public int MaxProcessingSeconds { get; set; }
 
+        /// <summary>
+        /// Time processing started
+        /// </summary>
         public DateTimeOffset ProcessingStartDateTime { get; set; }
 
         /// <summary>
@@ -85,7 +95,7 @@ namespace CFMessageQueue.Models
         /// <summary>
         /// Content type (Type name)
         /// </summary>
-        [MaxLength(100)]
+        [MaxLength(200)]
         public string ContentType { get; set; } = String.Empty;
     }
 }

@@ -339,7 +339,7 @@ namespace CFMessageQueue.Hub
                                     queueMessage.Status = QueueMessageStatuses.Default;
                                     queueMessage.ProcessingMessageHubClientId = "";
                                     queueMessage.ProcessingStartDateTime = DateTimeOffset.MinValue;
-                                    queueMessage.MaxProcessingMilliseconds = 0;
+                                    queueMessage.MaxProcessingSeconds = 0;
 
                                     await queueMessageService.UpdateAsync(queueMessage);
                                 }
@@ -412,20 +412,29 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                         }
+                        else if (String.IsNullOrWhiteSpace(addQueueMessageRequest.QueueMessage.TypeId))
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Type Id must be set";
+                        }
+                        else if (addQueueMessageRequest.QueueMessage.ExpirySeconds < 0)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Expiry Seconds is invalid";
+                        }                        
                         else
-                        {                            
+                        {
                             isHasMutex = _queueMutex.WaitOne();
 
-                            // Check if queue is full
-                            // TODO: Make this more efficient
+                            // Check if queue is full                            
                             var isQueueFull = false;
                             if (messageQueue.MaxSize > 0)
                             {
-                                var messageCount = (await queueMessageService.GetByMessageQueueAsync(messageQueue.Id)).Count;                                                        
+                                var messageCount = (await queueMessageService.GetByMessageQueueAsync(messageQueue.Id)).Count;
 
                                 isQueueFull = messageCount >= messageQueue.MaxSize;
                             }
-                            
+
                             if (isQueueFull)
                             {
                                 response.Response.ErrorCode = ResponseErrorCodes.MessageQueueFull;
@@ -433,13 +442,26 @@ namespace CFMessageQueue.Hub
                             }
                             else
                             {
-                                // Set message queue
-                                addQueueMessageRequest.QueueMessage.MessageQueueId = _messageQueue.Id;
-                                
-                                // Set the sender
-                                addQueueMessageRequest.QueueMessage.SenderMessageHubClientId = messageHubClient.Id;
+                                // Create queue message
+                                var queueMessage = new QueueMessageInternal()
+                                {
+                                    Content = addQueueMessageRequest.QueueMessage.Content,
+                                    ContentType = addQueueMessageRequest.QueueMessage.ContentType,
+                                    CreatedDateTime = DateTimeOffset.UtcNow,
+                                    ExpirySeconds = addQueueMessageRequest.QueueMessage.ExpirySeconds,
+                                    Id = Guid.NewGuid().ToString(),
+                                    MessageQueueId = addQueueMessageRequest.MessageQueueId,
+                                    Name = addQueueMessageRequest.QueueMessage.Name,
+                                    Priority = addQueueMessageRequest.QueueMessage.Priority,
+                                    SenderMessageHubClientId = messageHubClient.Id,
+                                    Status = QueueMessageStatuses.Default,
+                                    TypeId = addQueueMessageRequest.QueueMessage.TypeId
+                                };
 
-                                await queueMessageService.AddAsync(addQueueMessageRequest.QueueMessage);                                
+                                await queueMessageService.AddAsync(queueMessage);
+
+                                // Set QueueMessageId for response
+                                response.QueueMessageId = queueMessage.Id;
 
                                 // If client subscription indicates waiting for new message then flag notification
                                 _clientQueueSubscriptions.Where(s => s.NotifyIfMessageAdded).ToList()
@@ -447,7 +469,7 @@ namespace CFMessageQueue.Hub
                                         {
                                             s.DoNotifyMessageAdded = true;
                                             s.NotifyIfMessageAdded = false;
-                                        });                                
+                                        });
                             }
                         }
                         
@@ -517,6 +539,11 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
                             response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
                         }
+                        else if (getNextQueueMessageRequest.MaxProcessingSeconds < 1)
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Processing Seconds must be 1 second or more";
+                        }
                         else
                         {
                             // Try and get message, if no message then may need to wait for message
@@ -532,20 +559,15 @@ namespace CFMessageQueue.Hub
                                 if (messageQueue.MaxConcurrentProcessing == 0 ||
                                     _queueMessageInternalProcessing.Count < messageQueue.MaxConcurrentProcessing)
                                 {
-                                    // TODO: Make this more efficient
-                                    queueMessage = (await queueMessageService.GetAllAsync())
-                                                    .Where(m => m.MessageQueueId == messageQueue.Id)
-                                                    .Where(m => m.Status == QueueMessageStatuses.Default)
-                                                    .Where(m => m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow)  // Not expired
-                                                    .OrderBy(m => m.CreatedDateTime).FirstOrDefault();
+                                    queueMessage = await queueMessageService.GetNextAsync(messageQueue.Id);
                                 }
-                                                                
+
                                 if (queueMessage != null)
                                 {
                                     // Update message as Processing
                                     queueMessage.Status = QueueMessageStatuses.Processing;
                                     queueMessage.ProcessingMessageHubClientId = messageHubClient.Id;
-                                    queueMessage.MaxProcessingMilliseconds = getNextQueueMessageRequest.MaxProcessingMilliseconds;
+                                    queueMessage.MaxProcessingSeconds = getNextQueueMessageRequest.MaxProcessingSeconds;
                                     queueMessage.ProcessingStartDateTime = DateTimeOffset.UtcNow;
 
                                     await queueMessageService.UpdateAsync(queueMessage);
@@ -816,7 +838,8 @@ namespace CFMessageQueue.Hub
         }
 
         /// <summary>
-        /// Expires queue messages being processed that have not been processed within the timeout
+        /// Expires queue messages being processed that have not been processed within the timeout. Message status is reset to Default
+        /// so that it can be processed against.
         /// </summary>
         /// <param name="messageQueueId"></param>
         /// <returns></returns>
@@ -829,8 +852,9 @@ namespace CFMessageQueue.Hub
                 {
                     _lastExpireProcessingMessages = DateTimeOffset.UtcNow;
 
+                    // Get messages currently processing that have expired
                     var expiredQueueMessages = _queueMessageInternalProcessing.Where(m => m.MessageQueueId == messageQueueId)
-                                                .Where(m => m.ProcessingStartDateTime.AddMilliseconds(m.MaxProcessingMilliseconds) < DateTimeOffset.UtcNow).ToList();
+                                                .Where(m => m.ProcessingStartDateTime.AddSeconds(m.MaxProcessingSeconds) <= DateTimeOffset.UtcNow).ToList();
 
                     if (expiredQueueMessages.Any())
                     {
@@ -840,17 +864,20 @@ namespace CFMessageQueue.Hub
 
                             var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
 
+                            // Reset queue message status
                             while (expiredQueueMessages.Any())
-                            {
-                                // Reset queue message status
-                                var queueMessage = await queueMessageService.GetByIdAsync(expiredQueueMessages.First().Id);                                
+                            {                                
+                                var queueMessage = await queueMessageService.GetByIdAsync(expiredQueueMessages.First().Id);
 
-                                queueMessage.Status = QueueMessageStatuses.Default;
-                                queueMessage.ProcessingStartDateTime = DateTimeOffset.MinValue;
-                                queueMessage.ProcessingMessageHubClientId = String.Empty;
-                                queueMessage.MaxProcessingMilliseconds = 0;
+                                if (queueMessage != null)
+                                {
+                                    queueMessage.Status = QueueMessageStatuses.Default;
+                                    queueMessage.ProcessingStartDateTime = DateTimeOffset.MinValue;
+                                    queueMessage.ProcessingMessageHubClientId = String.Empty;
+                                    queueMessage.MaxProcessingSeconds = 0;
 
-                                await queueMessageService.UpdateAsync(queueMessage);
+                                    await queueMessageService.UpdateAsync(queueMessage);
+                                }
 
                                 _queueMessageInternalProcessing.Remove(expiredQueueMessages.First());
 

@@ -8,6 +8,9 @@ namespace CFMessageQueue.Services
 {
     /// <summary>
     /// Message queue client connector. Communicates with queue worker for specific queue.
+    /// 
+    /// Note that we don't need to validate most parameters because the Hub validates them and it just means that there's
+    /// duplicate validation logic.
     /// </summary>
     public class MessageQueueClientConnector : IMessageQueueClientConnector, IDisposable
     {
@@ -62,31 +65,23 @@ namespace CFMessageQueue.Services
                 }
             }
         }
-      
-        /// <summary>
-        /// Gets queue message in internal format (Serialized content)
-        /// </summary>
-        /// <param name="queueMessage"></param>
-        /// <returns></returns>
-        private static QueueMessageInternal GetQueueMessageInternal(QueueMessage queueMessage)
+
+        private static NewQueueMessageInternal GetNewQueueMessageInternal(NewQueueMessage queueMessage)
         {
             var serializer = new QueueMessageContentSerializer();
 
-            var queueMessageInternal = new QueueMessageInternal()
-            {
-                Id = queueMessage.Id,                
+            var queueMessageInternal = new NewQueueMessageInternal()
+            {                
                 Content = serializer.Serialize(queueMessage.Content, queueMessage.Content.GetType()),
-                ContentType = queueMessage.Content.GetType().AssemblyQualifiedName,
-                CreatedDateTime = queueMessage.CreatedDateTime,
-                ExpirySeconds = queueMessage.ExpirySeconds,
-                MessageQueueId = queueMessage.MessageQueueId,
+                ContentType = queueMessage.Content.GetType().AssemblyQualifiedName,                
+                ExpirySeconds = queueMessage.ExpirySeconds,                
                 Name = queueMessage.Name,
-                SenderMessageHubClientId = queueMessage.SenderMessageHubClientId,
-                TypeId = queueMessage.TypeId                 
+                Priority = queueMessage.Priority,
+                TypeId = queueMessage.TypeId
             };
 
             return queueMessageInternal;
-        }
+        }            
 
         /// <summary>
         /// Gets queue message in external format (Deserialized content)
@@ -100,11 +95,12 @@ namespace CFMessageQueue.Services
             var queueMessage = new QueueMessage()
             {
                 Id = queueMessageInternal.Id,
-                Content = serializer.Deserialize(queueMessageInternal.Content, Type.GetType(queueMessageInternal.ContentType)),
+                Content = serializer.Deserialize(queueMessageInternal.Content, Type.GetType(queueMessageInternal.ContentType)),                
                 CreatedDateTime = queueMessageInternal.CreatedDateTime,
                 ExpirySeconds = queueMessageInternal.ExpirySeconds,
                 MessageQueueId = queueMessageInternal.MessageQueueId,
                 Name = queueMessageInternal.Name,
+                Priority = queueMessageInternal.Priority,
                 SenderMessageHubClientId = queueMessageInternal.SenderMessageHubClientId,
                 TypeId = queueMessageInternal.TypeId
             };
@@ -112,18 +108,18 @@ namespace CFMessageQueue.Services
             return queueMessage;
         }
 
-        public async Task SendAsync(QueueMessage queueMessage)
+        public async Task SendAsync(NewQueueMessage queueMessage)
         {
             if (_messageQueue == null)
             {
                 throw new ArgumentException("Queue must be set");
-            }
+            }           
 
             var addQueueMessageRequest = new AddQueueMessageRequest()
             {
                 SecurityKey = _securityKey,
                 ClientSessionId = _clientSessionId,
-                QueueMessage = GetQueueMessageInternal(queueMessage),
+                QueueMessage = GetNewQueueMessageInternal(queueMessage),
                 MessageQueueId = _messageQueue.Id                
             };
 
@@ -144,19 +140,20 @@ namespace CFMessageQueue.Services
             }
         }
 
-        public async Task<QueueMessage?> GetNextAsync(TimeSpan maxWait)
+        public async Task<QueueMessage?> GetNextAsync(TimeSpan maxWait, TimeSpan maxProcessingTime)
         {
             if (_messageQueue == null)
             {
                 throw new ArgumentException("Queue must be set");
             }
-
+          
             var getNextQueueMessageRequest = new GetNextQueueMessageRequest()
             {
                 SecurityKey = _securityKey,
                 ClientSessionId = _clientSessionId,
                 MessageQueueId = _messageQueue.Id,
-                MaxWaitMilliseconds = (int)maxWait.TotalMilliseconds
+                MaxWaitMilliseconds = (int)maxWait.TotalMilliseconds,
+                MaxProcessingSeconds = (int)maxWait.TotalSeconds
             };
 
             var remoteEndpointInfo = new EndpointInfo()

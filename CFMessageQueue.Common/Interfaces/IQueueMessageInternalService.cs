@@ -7,5 +7,7 @@ namespace CFMessageQueue.Interfaces
         Task<List<QueueMessageInternal>> GetExpiredAsync(string messageQueueId, DateTimeOffset now);
 
         Task<List<QueueMessageInternal>> GetByMessageQueueAsync(string messageQueueId);
+
+        Task<QueueMessageInternal> GetNextAsync(string messageQueueId);
     }
 }

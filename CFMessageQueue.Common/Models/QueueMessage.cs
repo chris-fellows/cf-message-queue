@@ -1,37 +1,41 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace CFMessageQueue.Models
+﻿namespace CFMessageQueue.Models
 {
     /// <summary>
     /// Queue messaage (External format)
-    /// </summary>    
+    /// </summary>        
     public class QueueMessage
-    {
-        [MaxLength(50)]
+    {                
+        /// <summary>
+        /// Unique Id
+        /// </summary>
         public string Id { get; set; } = String.Empty;
 
         /// <summary>
         /// Message type
-        /// </summary>
-        [MaxLength(50)]
+        /// </summary>        
         public string TypeId { get; set; } = String.Empty;
 
         /// <summary>
+        /// Message priority for processing. 0=Highest priority.
+        /// 
+        /// Normal messages should be sent with a non-zero priority so that high priority messages can be forced to the front
+        /// of the queue.
+        /// </summary>        
+        public short Priority { get; set; } = 50;
+
+        /// <summary>
         /// Sender message hub client. Does not need to be set by client, will be set by hub.
-        /// </summary>
-        [MaxLength(50)]
+        /// </summary>        
         public string SenderMessageHubClientId { get; set; } = String.Empty;
 
         /// <summary>
         /// Message queue. Does not need to be set by client, will be set by hub.
-        /// </summary>
-        [MaxLength(50)]
+        /// </summary>        
         public string MessageQueueId { get; set; } = String.Empty;
 
         /// <summary>
         /// Message name (User friendly description)
-        /// </summary>
-        [MaxLength(100)]
+        /// </summary>        
         public string Name { get; set; } = String.Empty;
 
         /// <summary>

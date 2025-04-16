@@ -1,5 +1,8 @@
 ﻿namespace CFMessageQueue.Models
 {
+    /// <summary>
+    /// Message base
+    /// </summary>
     public abstract class MessageBase
     {
         /// <summary>
