@@ -53,7 +53,12 @@ namespace CFMessageQueue.Models
         /// <summary>
         /// Created time
         /// </summary>
-        public DateTimeOffset CreatedDateTime { get; set; }
+        public DateTime CreatedDateTime { get; set; }
+
+        /// <summary>
+        /// Expiry time
+        /// </summary>
+        public DateTime ExpiryDateTime { get; set; }
 
         /// <summary>
         /// Status

@@ -3,6 +3,8 @@ using CFMessageQueue.Constants;
 using CFMessageQueue.Exceptions;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
+using CFMessageQueue.Utilities;
+using System.Threading.Channels;
 
 namespace CFMessageQueue.Services
 {
@@ -12,7 +14,7 @@ namespace CFMessageQueue.Services
     /// Note that we don't need to validate most parameters because the Hub validates them and it just means that there's
     /// duplicate validation logic.
     /// </summary>
-    public class MessageQueueClientConnector : IMessageQueueClientConnector, IDisposable
+    public class MessageQueueClientConnector : ClientConnectorBase, IMessageQueueClientConnector, IDisposable
     {
         private MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
@@ -24,7 +26,7 @@ namespace CFMessageQueue.Services
         private int _localPort;
 
         private Action<string, long?>? _notificationAction;      // Params: Event Name, Queue Size
-
+        
         public MessageQueueClientConnector(string securityKey, int localPort)
         {
             _securityKey = securityKey;
@@ -48,17 +50,23 @@ namespace CFMessageQueue.Services
                 if (_messageQueue != null)
                 {
                     _messageHubConnection = new MessageHubConnection();
-                    _messageHubConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+                    _messageHubConnection.OnMessageReceived += delegate (MessageBase messageBase, MessageReceivedInfo messageReceivedInfo)
                     {
-                        // If notification then forward it
-                        if (connectionMessage.TypeId == MessageTypeIds.MessageQueueNotification &&
-                            _notificationAction != null)
+                        // If response then forward to relevant session
+                        if (messageBase.Response != null &&
+                                _responseSessions.ContainsKey(messageBase.Response.MessageId))
                         {
-                            var notification = _messageHubConnection.MessageConverterList.MessageQueueNotificationMessageConverter.GetExternalMessage(connectionMessage);
+                            var writer = _responseSessions[messageBase.Response.MessageId].MessagesChannel.Writer;
+                            writer.WriteAsync(new Tuple<MessageBase, MessageReceivedInfo>(messageBase, messageReceivedInfo));
+                        }                        
+                        else if (messageBase.TypeId == MessageTypeIds.MessageQueueNotification &&
+                                    _notificationAction != null)
+                        {                            
+                            var notification = (MessageQueueNotificationMessage)messageBase;
 
                             // Notify
-                            Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));
-                        }
+                            Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));                            
+                        }                        
                     };
 
                     _messageHubConnection.StartListening(_localPort);
@@ -108,36 +116,60 @@ namespace CFMessageQueue.Services
             return queueMessage;
         }
 
-        public async Task SendAsync(NewQueueMessage queueMessage)
+        public async Task<bool> SendAsync(NewQueueMessage queueMessage)
         {
             if (_messageQueue == null)
             {
                 throw new ArgumentException("Queue must be set");
-            }           
-
-            var addQueueMessageRequest = new AddQueueMessageRequest()
-            {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                QueueMessage = GetNewQueueMessageInternal(queueMessage),
-                MessageQueueId = _messageQueue.Id                
-            };
-
-            var remoteEndpointInfo = new EndpointInfo()
-            {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
-
-            try
-            {
-                var response = _messageHubConnection.SendAddQueueMessageMessage(addQueueMessageRequest, remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
             }
-            catch(MessageConnectionException messageConnectionException)
+
+            return await Task.Run(async () =>
             {
-                throw new MessageQueueException("Error adding message to queue", messageConnectionException);
-            }
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new AddQueueMessageRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        QueueMessage = GetNewQueueMessageInternal(queueMessage),
+                        MessageQueueId = _messageQueue.Id
+                    };
+
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
+
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
+
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());                        
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error adding message to queue", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });
         }
 
         public async Task<QueueMessage?> GetNextAsync(TimeSpan maxWait, TimeSpan maxProcessingTime)
@@ -146,36 +178,60 @@ namespace CFMessageQueue.Services
             {
                 throw new ArgumentException("Queue must be set");
             }
-          
-            var getNextQueueMessageRequest = new GetNextQueueMessageRequest()
-            {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = _messageQueue.Id,
-                MaxWaitMilliseconds = (int)maxWait.TotalMilliseconds,
-                MaxProcessingSeconds = (int)maxWait.TotalSeconds
-            };
 
-            var remoteEndpointInfo = new EndpointInfo()
+            return await Task.Run(async () =>
             {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new GetNextQueueMessageRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = _messageQueue.Id,
+                        MaxWaitMilliseconds = (int)maxWait.TotalMilliseconds,
+                        MaxProcessingSeconds = (int)maxProcessingTime.TotalSeconds
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendGetNextQueueMessageRequest(getNextQueueMessageRequest, remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
-                
-                return response.QueueMessage == null ? null : GetQueueMessageExternal(response.QueueMessage);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting next queue message", messageConnectionException);
-            }
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
+
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
+
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (GetNextQueueMessageResponse)responseMessages.First();
+
+                        return response.QueueMessage == null ? null : GetQueueMessageExternal(response.QueueMessage);
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting next queue message", messageConnectionException);
+                    }
+                }
+            });
         }
         
-        public async Task SetProcessed(string queueMessageId, bool processed)
+        public async Task<bool> SetProcessed(string queueMessageId, bool processed)
         {
             if (String.IsNullOrEmpty(queueMessageId))
             {
@@ -186,29 +242,54 @@ namespace CFMessageQueue.Services
                 throw new ArgumentException("Queue must be set");
             }
 
-            var queueMessageProcessedMessage = new QueueMessageProcessedMessage()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = _messageQueue.Id,
-                QueueMessageId = queueMessageId,
-                Processed = processed
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new QueueMessageProcessedRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = _messageQueue.Id,
+                        QueueMessageId = queueMessageId,
+                        Processed = processed
+                    };
 
-            var remoteEndpointInfo = new EndpointInfo()
-            {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
 
-            try
-            {
-                _messageHubConnection.SendQueueMessageProcessedMessage(queueMessageProcessedMessage, remoteEndpointInfo);                                
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error notifying that queue message was processed", messageConnectionException);
-            }        
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
+
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error notifying that queue message was processed", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });
         }
 
         public async Task<List<QueueMessage>> GetQueueMessages(int pageItems, int page)
@@ -226,32 +307,56 @@ namespace CFMessageQueue.Services
                 throw new ArgumentOutOfRangeException(nameof(page), "Page must be 1 or more");
             }
 
-            var getQueueMessagesRequest = new GetQueueMessagesRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = _messageQueue.Id,
-                PageItems = pageItems,
-                Page = page
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new GetQueueMessagesRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = _messageQueue.Id,
+                        PageItems = pageItems,
+                        Page = page
+                    };
 
-            var remoteEndpointInfo = new EndpointInfo()
-            {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendGetQueueMessagesRequest(getQueueMessagesRequest, remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                return response.QueueMessages == null ? null : response.QueueMessages.Select(m => GetQueueMessageExternal(m)).ToList();
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting queue messages", messageConnectionException);
-            }
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (GetQueueMessagesResponse)responseMessages.First();
+
+                        return response.QueueMessages == null ? new() : response.QueueMessages.Select(m => GetQueueMessageExternal(m)).ToList();
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting queue messages", messageConnectionException);
+                    }
+                }
+            });
         }
 
         public async Task<string?> SubscribeAsync(Action<string, long?> notificationAction, TimeSpan queueSizeNotificationFrequency)
@@ -261,85 +366,118 @@ namespace CFMessageQueue.Services
                 throw new ArgumentException("Queue must be set");
             }
 
-            var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = _messageQueue.Id,
-                ActionName = "SUBSCRIBE",
-                QueueSizeFrequencySecs = Convert.ToInt64(queueSizeNotificationFrequency.TotalSeconds)
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new MessageQueueSubscribeRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = _messageQueue.Id,
+                        ActionName = "SUBSCRIBE",
+                        QueueSizeFrequencySecs = Convert.ToInt64(queueSizeNotificationFrequency.TotalSeconds)
+                    };
 
-            var remoteEndpointInfo = new EndpointInfo()
-            {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendMessageQueueSubscribeRequest(messageQueueSubscribeRequest, remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                // Set notification action
-                _notificationAction = notificationAction;
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
 
-                return response.SubscribeId;
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error subscribing to message queue", messageConnectionException);
-            }
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (MessageQueueSubscribeResponse)responseMessages.First();
+                        
+                        // Set notification action
+                        _notificationAction = notificationAction;
+
+                        return response.SubscribeId;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error subscribing to message queue", messageConnectionException);
+                    }
+                }
+            });
         }
 
-        public Task UnsubscribeAsync()
+        public async Task<bool> UnsubscribeAsync()
         {
             if (_messageQueue == null)
             {
                 throw new ArgumentException("Queue must be set");
             }
 
-            var messageQueueSubscribeRequest = new MessageQueueSubscribeRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = _messageQueue.Id,
-                ActionName = "UNSUBSCRIBE"
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new MessageQueueSubscribeRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = _messageQueue.Id,
+                        ActionName = "UNSUBSCRIBE"
+                    };
 
-            var remoteEndpointInfo = new EndpointInfo()
-            {
-                Ip = _messageQueue.Ip,
-                Port = _messageQueue.Port
-            };
+                    var remoteEndpointInfo = new EndpointInfo()
+                    {
+                        Ip = _messageQueue.Ip,
+                        Port = _messageQueue.Port
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendMessageQueueSubscribeRequest(messageQueueSubscribeRequest, remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                // Clear subscribe action
-                _notificationAction = null;
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error subscribing to message queue", messageConnectionException);
-            }
+                        _messageHubConnection.SendMessage(request, remoteEndpointInfo);
 
-            return Task.CompletedTask;               
-        }
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
 
-        /// <summary>
-        /// Checks connection message response and throws an exception if an error
-        /// </summary>
-        /// <param name="message"></param>
-        /// <exception cref="MessageConnectionException"></exception>
-        private void ThrowResponseExceptionIfRequired(MessageBase message)
-        {
-            if (message.Response != null && message.Response.ErrorCode != null)
-            {
-                throw new MessageConnectionException(message.Response.ErrorMessage);
-            }
-        }
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        // Clear subscribe action
+                        _notificationAction = null;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error subscribing to message queue", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });               
+        }     
     }
 }

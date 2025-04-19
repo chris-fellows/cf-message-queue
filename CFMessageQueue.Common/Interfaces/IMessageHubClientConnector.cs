@@ -22,7 +22,7 @@ namespace CFMessageQueue.Interfaces
         /// <param name="messageHubClientId"></param>
         /// <param name="roleTypes"></param>
         /// <returns></returns>
-        Task ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes);
+        Task<bool> ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes);
 
         /// <summary>
         /// Configure message hub client permissions for queue level functions
@@ -34,7 +34,7 @@ namespace CFMessageQueue.Interfaces
         /// <param name="messageQueueId">Message queue (If not set then sets hub level config)</param>
         /// <param name="roleTypes"></param>
         /// <returns></returns>
-        Task ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes);
+        Task<bool> ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes);
 
         /// <summary>
         /// Adds message queue
@@ -52,14 +52,14 @@ namespace CFMessageQueue.Interfaces
         /// </summary>
         /// <param name="messageQueueId"></param>
         /// <returns></returns>
-        Task DeleteMessageQueueAsync(string messageQueueId);
+        Task<bool> DeleteMessageQueueAsync(string messageQueueId);
 
         /// <summary>
         /// Clears message queue
         /// </summary>
         /// <param name="messageQueueId"></param>
         /// <returns></returns>
-        Task ClearMessageQueueAsync(string messageQueueId);
+        Task<bool> ClearMessageQueueAsync(string messageQueueId);
 
         /// <summary>
         /// Adds message hub client

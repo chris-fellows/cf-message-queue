@@ -13,7 +13,7 @@ namespace CFMessageQueue.Enums
         [Description("Message queue is full")]
         MessageQueueFull,
 
-        [Description("Unknown")]
+        [Description("Unknown")]      // Catch-all error
         Unknown,
 
         [Description("Permission denied")]

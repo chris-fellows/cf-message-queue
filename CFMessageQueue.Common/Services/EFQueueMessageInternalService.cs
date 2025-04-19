@@ -5,6 +5,7 @@ using CFMessageQueue.Models;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -69,11 +70,10 @@ namespace CFMessageQueue.Services
         }
 
         public async Task<List<QueueMessageInternal>> GetExpiredAsync(string messageQueueId, DateTimeOffset now)
-        {
+        {            
             return await Context.QueueMessageInternal
-                .Where(i => i.MessageQueueId == messageQueueId &&
-                        i.ExpirySeconds > 0 &&
-                        i.CreatedDateTime.AddSeconds(i.ExpirySeconds) <= now).ToListAsync();
+                .Where(i => i.MessageQueueId == messageQueueId &&                        
+                        i.ExpiryDateTime <= now).ToListAsync();
         }
 
         public async Task<List<QueueMessageInternal>> GetByMessageQueueAsync(string messageQueueId)
@@ -84,10 +84,14 @@ namespace CFMessageQueue.Services
 
         public async Task<QueueMessageInternal?> GetNextAsync(string messageQueueId)
         {
+            // (m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow))
+            var now = DateTime.UtcNow;
+
+            // Calling m.CreatedDateTime.AddSeconds(m.ExpirySeconds) causes error
             return await Context.QueueMessageInternal                    
                     .Where(m => m.MessageQueueId == messageQueueId &&
                         m.Status == QueueMessageStatuses.Default &&
-                        (m.ExpirySeconds == 0 || m.CreatedDateTime.AddSeconds(m.ExpirySeconds) < DateTimeOffset.UtcNow))
+                        m.ExpiryDateTime >= now)
                     .OrderBy(m => m.Priority)
                     .ThenBy(m => m.CreatedDateTime).FirstOrDefaultAsync();                                        
         }

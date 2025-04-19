@@ -18,7 +18,7 @@ namespace CFMessageQueue.Interfaces
         /// <param name="message"></param>
         /// <param name="messageQueue"></param>
         /// <returns></returns>
-        Task SendAsync(NewQueueMessage message);
+        Task<bool> SendAsync(NewQueueMessage message);
 
         /// <summary>
         /// Gets next message from queue. If no message then can wait until the max wait if set.
@@ -36,7 +36,7 @@ namespace CFMessageQueue.Interfaces
         /// <param name="queueMessageId"></param>
         /// <param name="processed"></param>
         /// <returns></returns>
-        Task SetProcessed(string queueMessageId, bool processed);
+        Task<bool> SetProcessed(string queueMessageId, bool processed);
 
         /// <summary>
         /// Gets page of queue messages
@@ -59,6 +59,6 @@ namespace CFMessageQueue.Interfaces
         /// </summary>
         /// <param name="subscribeId"></param>
         /// <returns></returns>
-        Task UnsubscribeAsync();
+        Task<bool> UnsubscribeAsync();
     }
 }

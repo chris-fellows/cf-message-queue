@@ -90,7 +90,7 @@ namespace CFMessageQueue.TestClient
                     TypeId = "Test1",
                     ExpirySeconds = 3600 * 24 * 7,
                     Name = $"Message {countMessagesSent + 1}",
-                    Priority = 50,   
+                    Priority = 50,                   
                     Content = testObject
                 };
 

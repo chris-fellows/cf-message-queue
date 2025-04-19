@@ -1,6 +1,7 @@
 ﻿using CFMessageQueue.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -27,20 +28,53 @@ namespace CFMessageQueue.Logging
                 Directory.CreateDirectory(logFolder);
             }
 
-            Char delimiter = (Char)9;
-
-            var isWriteHeaders = !File.Exists(logFile);
-            using (var streamWriter = new StreamWriter(logFile, true, System.Text.Encoding.UTF8))
+            bool logged = false;
+            var stopwatch = new Stopwatch();            
+            do
             {
-                if (isWriteHeaders)
+                try
                 {
-                    streamWriter.WriteLine($"Date{delimiter}Action{delimiter}Queue{delimiter}MessageId{delimiter}MessageTypeId{delimiter}CreatedDateTime");
-                }
+                    Char delimiter = (Char)9;
+                    var isWriteHeaders = !File.Exists(logFile);
+                    using (var streamWriter = new StreamWriter(logFile, true, System.Text.Encoding.UTF8))
+                    {
+                        if (isWriteHeaders)
+                        {
+                            streamWriter.WriteLine($"Date{delimiter}Action{delimiter}Queue{delimiter}MessageId{delimiter}MessageTypeId{delimiter}CreatedDateTime");
+                        }
 
-                streamWriter.WriteLine($"{date}{delimiter}{action}{delimiter}{messageQueueName}{delimiter}{queueMessage.Id}{delimiter}{queueMessage.TypeId}{delimiter}{queueMessage.CreatedDateTime}");
-                streamWriter.Flush();
-            }
+                        streamWriter.WriteLine($"{date}{delimiter}{action}{delimiter}{messageQueueName}{delimiter}{queueMessage.Id}{delimiter}{queueMessage.TypeId}{delimiter}{queueMessage.CreatedDateTime}");
+                        streamWriter.Flush();
+                    }
+                    logged = true;
+                }
+                catch (Exception exception)
+                {
+                    if (IsFileInUseByAnotherProcess(exception))
+                    {
+                        if (!stopwatch.IsRunning)
+                        {
+                            stopwatch.Start();
+                        }
+                        else if (stopwatch.Elapsed >= TimeSpan.FromSeconds(5))      // Time out
+                        {
+                            throw;
+                        }
+                        Thread.Sleep(200);  // Wait before retry
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+            } while (!logged);       
         }
+
+        private static bool IsFileInUseByAnotherProcess(Exception exception)
+        {
+            return exception != null && exception.Message.Contains("another process");
+        }
+
         public void LogQueue(DateTimeOffset date, string action, string messageQueueName)
         {
             var logFile = GetLogFile(date);
@@ -51,19 +85,48 @@ namespace CFMessageQueue.Logging
                 Directory.CreateDirectory(logFolder);
             }
 
-            Char delimiter = (Char)9;
-
-            var isWriteHeaders = !File.Exists(logFile);
-            using (var streamWriter = new StreamWriter(logFile, true, System.Text.Encoding.UTF8))
+            bool logged = false;
+            var stopwatch = new Stopwatch();            
+            do
             {
-                if (isWriteHeaders)
+                try
                 {
-                    streamWriter.WriteLine($"Date{delimiter}Action{delimiter}Queue{delimiter}MessageId{delimiter}MessageTypeId{delimiter}CreatedDateTime");
-                }
+                    Char delimiter = (Char)9;
+                    var isWriteHeaders = !File.Exists(logFile);
+                    using (var streamWriter = new StreamWriter(logFile, true, System.Text.Encoding.UTF8))
+                    {
+                        if (isWriteHeaders)
+                        {
+                            streamWriter.WriteLine($"Date{delimiter}Action{delimiter}Queue{delimiter}MessageId{delimiter}MessageTypeId{delimiter}CreatedDateTime");
+                        }
 
-                streamWriter.WriteLine($"{date}{delimiter}{action}{delimiter}{messageQueueName}{delimiter}{""}{delimiter}{""}{delimiter}{""}");
-                streamWriter.Flush();
-            }
+                        streamWriter.WriteLine($"{date}{delimiter}{action}{delimiter}{messageQueueName}{delimiter}{""}{delimiter}{""}{delimiter}{""}");
+                        streamWriter.Flush();
+                    }
+                    logged = true;
+                }
+                catch (Exception exception)
+                {
+                    if (IsFileInUseByAnotherProcess(exception))
+                    {
+                        if (!stopwatch.IsRunning)
+                        {
+                            stopwatch.Start();
+                        }
+                        else if (stopwatch.Elapsed >= TimeSpan.FromSeconds(5))      // Time out
+                        {
+                            throw;
+                        }
+                        Thread.Sleep(200);  // Wait before retry
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+            } while (!logged);
+
+            
         }
 
         private string GetLogFile(DateTimeOffset date)

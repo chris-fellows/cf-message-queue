@@ -10,9 +10,9 @@ using System.Xml.Linq;
 
 namespace CFMessageQueue.MessageConverters
 {
-    public class QueueMessageProcessedMessageConverter : IExternalMessageConverter<QueueMessageProcessedMessage>
+    public class QueueMessageProcessedRequestConverter : IExternalMessageConverter<QueueMessageProcessedRequest>
     {
-        public ConnectionMessage GetConnectionMessage(QueueMessageProcessedMessage externalMessage)
+        public ConnectionMessage GetConnectionMessage(QueueMessageProcessedRequest externalMessage)
         {
             var connectionMessage = new ConnectionMessage()
             {
@@ -51,9 +51,9 @@ namespace CFMessageQueue.MessageConverters
             return connectionMessage;
         }
 
-        public QueueMessageProcessedMessage GetExternalMessage(ConnectionMessage connectionMessage)
+        public QueueMessageProcessedRequest GetExternalMessage(ConnectionMessage connectionMessage)
         {
-            var externalMessage = new QueueMessageProcessedMessage()
+            var externalMessage = new QueueMessageProcessedRequest()
             {
                 Id = connectionMessage.Id,
                 SecurityKey = connectionMessage.Parameters.First(p => p.Name == "SecurityKey").Value,

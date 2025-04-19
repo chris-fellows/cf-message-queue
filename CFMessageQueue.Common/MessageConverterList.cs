@@ -1,6 +1,8 @@
 ﻿using CFConnectionMessaging.Interfaces;
+using CFConnectionMessaging.Models;
 using CFMessageQueue.Models;
 using CFMessageQueue.MessageConverters;
+using CFMessageQueue.Constants;
 
 namespace CFMessageQueue
 {
@@ -44,43 +46,99 @@ namespace CFMessageQueue
         private readonly IExternalMessageConverter<MessageQueueSubscribeRequest> _messageQueueSubscribeRequestConverter = new MessageQueueSubscribeRequestConverter();
         private readonly IExternalMessageConverter<MessageQueueSubscribeResponse> _messageQueueSubscribeResponseConverter = new MessageQueueSubscribeResponseConverter();
 
-        private readonly IExternalMessageConverter<QueueMessageProcessedMessage> _queueMessageProcessedMessageConverter = new QueueMessageProcessedMessageConverter();
+        private readonly IExternalMessageConverter<QueueMessageProcessedRequest> _queueMessageProcessedRequestConverter = new QueueMessageProcessedRequestConverter();
+        private readonly IExternalMessageConverter<QueueMessageProcessedResponse> _queueMessageProcessedResponseConverter = new QueueMessageProcessedResponseConverter();
 
-        public IExternalMessageConverter<AddMessageHubClientRequest> AddMessageHubClientRequestConverter => _addMessageHubClientRequestConverter;
-        public IExternalMessageConverter<AddMessageHubClientResponse> AddMessageHubClientResponseConverter => _addMessageHubClientResponseConverter;
+        public ConnectionMessage GetConnectionMessage(MessageBase externalMessage)
+        {
+            return externalMessage.TypeId switch
+            {
+                MessageTypeIds.AddMessageHubClientRequest => _addMessageHubClientRequestConverter.GetConnectionMessage((AddMessageHubClientRequest)externalMessage),
+                MessageTypeIds.AddMessageHubClientResponse => _addMessageHubClientResponseConverter.GetConnectionMessage((AddMessageHubClientResponse)externalMessage),
 
-        public IExternalMessageConverter<AddMessageQueueRequest> AddMessageQueueRequestConverter => _addMessageQueueRequestConverter;
-        public IExternalMessageConverter<AddMessageQueueResponse> AddMessageQueueResponseConverter => _addMessageQueueResponseConverter;
+                MessageTypeIds.AddMessageQueueRequest => _addMessageQueueRequestConverter.GetConnectionMessage((AddMessageQueueRequest)externalMessage),
+                MessageTypeIds.AddMessageQueueResponse => _addMessageQueueResponseConverter.GetConnectionMessage((AddMessageQueueResponse)externalMessage),
 
-        public IExternalMessageConverter<AddQueueMessageRequest> AddQueueMessageRequestConverter => _addQueueMessageRequestConverter;
-        public IExternalMessageConverter<AddQueueMessageResponse> AddQueueMessageResponseConverter => _addQueueMessageResponseConverter;
+                MessageTypeIds.AddQueueMessageRequest => _addQueueMessageRequestConverter.GetConnectionMessage((AddQueueMessageRequest)externalMessage),
+                MessageTypeIds.AddQueueMessageResponse => _addQueueMessageResponseConverter.GetConnectionMessage((AddQueueMessageResponse)externalMessage),
 
-        public IExternalMessageConverter<ConfigureMessageHubClientRequest> ConfigureMessageHubClientRequestConverter => _configureMessageHubClientRequestConverter;
-        public IExternalMessageConverter<ConfigureMessageHubClientResponse> ConfigureMessageHubClientResponseConverter => _configureMessageHubClientResponseConverter;
+                MessageTypeIds.ConfigureMessageHubClientRequest => _configureMessageHubClientRequestConverter.GetConnectionMessage((ConfigureMessageHubClientRequest)externalMessage),
+                MessageTypeIds.ConfigureMessageHubClientResponse => _configureMessageHubClientResponseConverter.GetConnectionMessage((ConfigureMessageHubClientResponse)externalMessage),
 
-        public IExternalMessageConverter<ExecuteMessageQueueActionRequest> ExecuteMessageQueueActionRequestConverter => _executeMessageQueueActionRequestConverter;
-        public IExternalMessageConverter<ExecuteMessageQueueActionResponse> ExecuteMessageQueueActionResponseConverter => _executeMessageQueueActionResponseConverter;
+                MessageTypeIds.ExecuteMessageQueueActionRequest => _executeMessageQueueActionRequestConverter.GetConnectionMessage((ExecuteMessageQueueActionRequest)externalMessage),
+                MessageTypeIds.ExecuteMessageQueueActionResponse => _executeMessageQueueActionResponseConverter.GetConnectionMessage((ExecuteMessageQueueActionResponse)externalMessage),
 
-        public IExternalMessageConverter<GetMessageHubClientsRequest> GetMessageHubClientsRequestConverter => _getMessageHubClientsRequestConverter;
-        public IExternalMessageConverter<GetMessageHubClientsResponse> GetMessageHubClientsResponseConverter => _getMessageHubClientsResponseConverter;
+                MessageTypeIds.GetMessageHubClientsRequest => _getMessageHubClientsRequestConverter.GetConnectionMessage((GetMessageHubClientsRequest)externalMessage),
+                MessageTypeIds.GetMessageHubClientsResponse => _getMessageHubClientsResponseConverter.GetConnectionMessage((GetMessageHubClientsResponse)externalMessage),
 
-        public IExternalMessageConverter<GetMessageHubsRequest> GetMessageHubsRequestConverter => _getMessageHubsRequestConverter;
-        public IExternalMessageConverter<GetMessageHubsResponse> GetMessageHubsResponseConverter => _getMessageHubsResponseConverter;
+                MessageTypeIds.GetMessageHubsRequest => _getMessageHubsRequestConverter.GetConnectionMessage((GetMessageHubsRequest)externalMessage),
+                MessageTypeIds.GetMessageHubsResponse => _getMessageHubsResponseConverter.GetConnectionMessage((GetMessageHubsResponse)externalMessage),
 
-        public IExternalMessageConverter<GetMessageQueuesRequest> GetMessageQueuesRequestConverter => _getMessageQueuesRequestConverter;
-        public IExternalMessageConverter<GetMessageQueuesResponse> GetMessageQueuesResponseConverter => _getMessageQueuesResponseConverter;
+                MessageTypeIds.GetMessageQueuesRequest => _getMessageQueuesRequestConverter.GetConnectionMessage((GetMessageQueuesRequest)externalMessage),
+                MessageTypeIds.GetMessageQueuesResponse => _getMessageQueuesResponseConverter.GetConnectionMessage((GetMessageQueuesResponse)externalMessage),
 
-        public IExternalMessageConverter<GetNextQueueMessageRequest> GetNextQueueMessageRequestConverter => _getNextQueueMessageRequestConverter;
-        public IExternalMessageConverter<GetNextQueueMessageResponse> GetNextQueueMessageResponseConverter => _getNextQueueMessageResponseConverter;
+                MessageTypeIds.GetNextQueueMessageRequest => _getNextQueueMessageRequestConverter.GetConnectionMessage((GetNextQueueMessageRequest)externalMessage),
+                MessageTypeIds.GetNextQueueMessageResponse => _getNextQueueMessageResponseConverter.GetConnectionMessage((GetNextQueueMessageResponse)externalMessage),
 
-        public IExternalMessageConverter<GetQueueMessagesRequest> GetQueueMessagesRequestConverter => _getQueueMessagesRequestConverter;
-        public IExternalMessageConverter<GetQueueMessagesResponse> GetQueueMessagesResponseConverter => _getQueueMessagesResponseConverter;
+                MessageTypeIds.GetQueueMessagesRequest => _getQueueMessagesRequestConverter.GetConnectionMessage((GetQueueMessagesRequest)externalMessage),
+                MessageTypeIds.GetQueueMessagesResponse => _getQueueMessagesResponseConverter.GetConnectionMessage((GetQueueMessagesResponse)externalMessage),
 
-        public IExternalMessageConverter<MessageQueueNotificationMessage> MessageQueueNotificationMessageConverter => _messageQueueNotificationMessageConverter;
+                MessageTypeIds.MessageQueueNotification => _messageQueueNotificationMessageConverter.GetConnectionMessage((MessageQueueNotificationMessage)externalMessage),
 
-        public IExternalMessageConverter<MessageQueueSubscribeRequest> MessageQueueSubscribeRequestConverter => _messageQueueSubscribeRequestConverter;
-        public IExternalMessageConverter<MessageQueueSubscribeResponse> MessageQueueSubscribeResponseConverter => _messageQueueSubscribeResponseConverter;
+                MessageTypeIds.MessageQueueSubscribeRequest => _messageQueueSubscribeRequestConverter.GetConnectionMessage((MessageQueueSubscribeRequest)externalMessage),
+                MessageTypeIds.MessageQueueSubscribeResponse => _messageQueueSubscribeResponseConverter.GetConnectionMessage((MessageQueueSubscribeResponse)externalMessage),
 
-        public IExternalMessageConverter<QueueMessageProcessedMessage> QueueMessageProcessedMessageConverter => _queueMessageProcessedMessageConverter;
+                MessageTypeIds.QueueMessageProcessedRequest => _queueMessageProcessedRequestConverter.GetConnectionMessage((QueueMessageProcessedRequest)externalMessage),
+                MessageTypeIds.QueueMessageProcessedResponse => _queueMessageProcessedResponseConverter.GetConnectionMessage((QueueMessageProcessedResponse)externalMessage),
+
+                _ => throw new ArgumentException("Cannot convert external message to connection message")
+            };
+        }
+
+        public MessageBase GetExternalMessage(ConnectionMessage connectionMessage)
+        {
+            return connectionMessage.TypeId switch
+            {
+                MessageTypeIds.AddMessageHubClientRequest => _addMessageHubClientRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.AddMessageHubClientResponse => _addMessageHubClientResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.AddMessageQueueRequest => _addMessageQueueRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.AddMessageQueueResponse => _addMessageQueueResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.AddQueueMessageRequest => _addQueueMessageRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.AddQueueMessageResponse => _addQueueMessageResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.ConfigureMessageHubClientRequest => _configureMessageHubClientRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.ConfigureMessageHubClientResponse => _configureMessageHubClientResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.ExecuteMessageQueueActionRequest => _executeMessageQueueActionRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.ExecuteMessageQueueActionResponse => _executeMessageQueueActionResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.GetMessageHubClientsRequest => _getMessageHubClientsRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.GetMessageHubClientsResponse => _getMessageHubClientsResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.GetMessageHubsRequest => _getMessageHubsRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.GetMessageHubsResponse => _getMessageHubsResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.GetMessageQueuesRequest => _getMessageQueuesRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.GetMessageQueuesResponse => _getMessageQueuesResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.GetNextQueueMessageRequest => _getNextQueueMessageRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.GetNextQueueMessageResponse => _getNextQueueMessageResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.GetQueueMessagesRequest => _getQueueMessagesRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.GetQueueMessagesResponse => _getQueueMessagesResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.MessageQueueNotification => _messageQueueNotificationMessageConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.MessageQueueSubscribeRequest => _messageQueueSubscribeRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.MessageQueueSubscribeResponse => _messageQueueSubscribeResponseConverter.GetExternalMessage(connectionMessage),
+
+                MessageTypeIds.QueueMessageProcessedRequest => _queueMessageProcessedRequestConverter.GetExternalMessage(connectionMessage),
+                MessageTypeIds.QueueMessageProcessedResponse => _queueMessageProcessedResponseConverter.GetExternalMessage(connectionMessage),
+
+                _ => throw new ArgumentException("Cannot convert external message to connection message")
+            };
+        }
     }
 }

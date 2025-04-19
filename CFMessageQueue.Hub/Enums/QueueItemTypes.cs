@@ -3,7 +3,7 @@
     public enum QueueItemTypes
     {
         ArchiveLogs,
-        ConnectionMessage,
+        ExternalMessage,
         LogHubStatistics,
         LogQueueStatistics,
         ExpireProcessingQueueMessages,

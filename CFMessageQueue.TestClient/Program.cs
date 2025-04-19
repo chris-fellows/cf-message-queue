@@ -29,9 +29,9 @@ Console.WriteLine("Starting CF Message Queue Test Client");
 //new SendReceiveTest().Run();
 
 // Run producer consumer test
-//new ProducerConsumerTest().Run(TimeSpan.FromSeconds(60));
+new ProducerConsumerTest().Run(TimeSpan.FromSeconds(60));
 
 // Run producer test
-new ProducerTest().Run(TimeSpan.FromSeconds(60));
+//new ProducerTest().Run(TimeSpan.FromSeconds(60));
 
 Console.WriteLine("Terminating CF Message Queue Test Client");

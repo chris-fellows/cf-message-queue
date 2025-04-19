@@ -4,14 +4,13 @@ using CFMessageQueue.Enums;
 using CFMessageQueue.Hub.Enums;
 using CFMessageQueue.Hub.Models;
 using CFMessageQueue.Interfaces;
+using CFMessageQueue.Logging;
 using CFMessageQueue.Logs;
 using CFMessageQueue.Models;
 using CFMessageQueue.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
-using System.Diagnostics.Eventing.Reader;
 
 namespace CFMessageQueue.Hub
 {
@@ -20,7 +19,7 @@ namespace CFMessageQueue.Hub
     /// </summary>
     public class MessageQueueWorker
     {
-        private readonly MessageQueueClientsConnection _messageQueueClientsConnection;
+        private readonly MessageHubClientsConnection _clientsConnection;
 
         private readonly ConcurrentQueue<QueueItem> _queueItems = new();
 
@@ -44,7 +43,8 @@ namespace CFMessageQueue.Hub
         private TimeSpan _logStatisticsFrequency = TimeSpan.FromSeconds(60);
         private DateTimeOffset _lastLogStatistics = DateTimeOffset.MinValue;
 
-        private readonly ISimpleLog _log;      
+        private readonly ISimpleLog _log;
+        private readonly IAuditLog _auditLog;
 
         private readonly Mutex _queueMutex = new Mutex();
 
@@ -66,18 +66,19 @@ namespace CFMessageQueue.Hub
             _messageQueue = messageQueue;
             _serviceProvider = serviceProvider;
             _log = serviceProvider.GetRequiredService<ISimpleLog>();
+            _auditLog = serviceProvider.GetRequiredService<IAuditLog>();
 
-            _messageQueueClientsConnection = new MessageQueueClientsConnection(serviceProvider);            
+            _clientsConnection = new MessageHubClientsConnection(serviceProvider);            
 
             // Handle connection message received
-            _messageQueueClientsConnection.OnConnectionMessageReceived += delegate (ConnectionMessage connectionMessage, MessageReceivedInfo messageReceivedInfo)
+            _clientsConnection.OnMessageReceived += delegate (MessageBase message, MessageReceivedInfo messageReceivedInfo)
             {
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Received message {connectionMessage.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Received message {message.TypeId} from {messageReceivedInfo.RemoteEndpointInfo.Ip}:{messageReceivedInfo.RemoteEndpointInfo.Port}");
 
                 var queueItem = new QueueItem()
                 {
-                    ItemType = QueueItemTypes.ConnectionMessage,
-                    ConnectionMessage = connectionMessage,
+                    ItemType = QueueItemTypes.ExternalMessage,
+                    Message = message,
                     MessageReceivedInfo = messageReceivedInfo
                 };
                 _queueItems.Enqueue(queueItem);
@@ -86,13 +87,13 @@ namespace CFMessageQueue.Hub
             };
 
             // Handle client connection
-            _messageQueueClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            _clientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Queue client connected {endpointInfo.Ip}:{endpointInfo.Port}");
             };
 
             // Handle client disconnection
-            _messageQueueClientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
+            _clientsConnection.OnClientDisconnected += delegate (EndpointInfo endpointInfo)
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Queue client disconnected {endpointInfo.Ip}:{endpointInfo.Port}");
 
@@ -126,7 +127,7 @@ namespace CFMessageQueue.Hub
 
             _timer.Enabled = true;
 
-            _messageQueueClientsConnection.StartListening(_messageQueue.Port);
+            _clientsConnection.StartListening(_messageQueue.Port);
         }
 
         public void Stop()
@@ -135,7 +136,7 @@ namespace CFMessageQueue.Hub
 
             _timer.Enabled = false;
 
-            _messageQueueClientsConnection.StopListening();
+            _clientsConnection.StopListening();
         }
 
         private void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
@@ -220,33 +221,28 @@ namespace CFMessageQueue.Hub
         /// <param name="queueItem"></param>
         private void ProcessQueueItem(QueueItem queueItem)
         {
-            if (queueItem.ItemType == QueueItemTypes.ConnectionMessage && queueItem.ConnectionMessage != null)
+            if (queueItem.ItemType == QueueItemTypes.ExternalMessage && queueItem.Message != null)
             {
-                switch(queueItem.ConnectionMessage.TypeId)
+                switch(queueItem.Message.TypeId)
                 {
-                    case MessageTypeIds.AddQueueMessageRequest:
-                        var addQueueMessageRequest = _messageQueueClientsConnection.MessageConverterList.AddQueueMessageRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
-                        _queueItemTasks.Add(new QueueItemTask(HandleAddQueueMessageRequestAsync(addQueueMessageRequest, queueItem.MessageReceivedInfo), queueItem));
+                    case MessageTypeIds.AddQueueMessageRequest:                        
+                        _queueItemTasks.Add(new QueueItemTask(HandleAddQueueMessageRequestAsync((AddQueueMessageRequest)queueItem.Message, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
-                    case MessageTypeIds.GetNextQueueMessageRequest:
-                        var getNextQueueMessageRequest = _messageQueueClientsConnection.MessageConverterList.GetNextQueueMessageRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
-                        _queueItemTasks.Add(new QueueItemTask(HandleGetNextQueueMessageRequestAsync(getNextQueueMessageRequest, queueItem.MessageReceivedInfo), queueItem));
+                    case MessageTypeIds.GetNextQueueMessageRequest:                        
+                        _queueItemTasks.Add(new QueueItemTask(HandleGetNextQueueMessageRequestAsync((GetNextQueueMessageRequest)queueItem.Message, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
-                    case MessageTypeIds.GetQueueMessagesRequest:
-                        var getQueueMessagesRequest = _messageQueueClientsConnection.MessageConverterList.GetQueueMessagesRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
-                        _queueItemTasks.Add(new QueueItemTask(HandleGetQueueMessagesRequestAsync(getQueueMessagesRequest, queueItem.MessageReceivedInfo), queueItem));
+                    case MessageTypeIds.GetQueueMessagesRequest:                        
+                        _queueItemTasks.Add(new QueueItemTask(HandleGetQueueMessagesRequestAsync((GetQueueMessagesRequest)queueItem.Message, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
-                    case MessageTypeIds.MessageQueueSubscribeRequest:
-                        var messageQueueSubscribeRequest = _messageQueueClientsConnection.MessageConverterList.MessageQueueSubscribeRequestConverter.GetExternalMessage(queueItem.ConnectionMessage);
-                        _queueItemTasks.Add(new QueueItemTask(HandleMessageQueueSubscribeRequestAsync(messageQueueSubscribeRequest, queueItem.MessageReceivedInfo), queueItem));
+                    case MessageTypeIds.MessageQueueSubscribeRequest:                        
+                        _queueItemTasks.Add(new QueueItemTask(HandleMessageQueueSubscribeRequestAsync((MessageQueueSubscribeRequest)queueItem.Message, queueItem.MessageReceivedInfo), queueItem));
                         break;
 
-                    case MessageTypeIds.QueueMessageProcessedMessage:
-                        var queueMessageProcessedMessage = _messageQueueClientsConnection.MessageConverterList.QueueMessageProcessedMessageConverter.GetExternalMessage(queueItem.ConnectionMessage);
-                        _queueItemTasks.Add(new QueueItemTask(HandleQueueMessageProcessedMessageAsync(queueMessageProcessedMessage, queueItem.MessageReceivedInfo), queueItem));
+                    case MessageTypeIds.QueueMessageProcessedRequest:
+                        _queueItemTasks.Add(new QueueItemTask(HandleQueueMessageProcessedRequestAsync((QueueMessageProcessedRequest)queueItem.Message, queueItem.MessageReceivedInfo), queueItem));
                         break;
                 }
             }
@@ -268,13 +264,23 @@ namespace CFMessageQueue.Hub
             }            
         }
 
-        private Task HandleQueueMessageProcessedMessageAsync(QueueMessageProcessedMessage queueMessageProcessedMessage, MessageReceivedInfo messageReceivedInfo)
+        private Task HandleQueueMessageProcessedRequestAsync(QueueMessageProcessedRequest queueMessageProcessedRequest, MessageReceivedInfo messageReceivedInfo)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 var isHasMutex = false;
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {queueMessageProcessedMessage.TypeId}");
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {queueMessageProcessedRequest.TypeId}");
+
+                var response = new QueueMessageProcessedResponse()
+                {
+                    Response = new MessageResponse()
+                    {
+                        IsMore = false,
+                        MessageId = queueMessageProcessedRequest.Id,
+                        Sequence = 1
+                    },
+                };
 
                 try
                 {
@@ -282,21 +288,11 @@ namespace CFMessageQueue.Hub
                     {
                         var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                         var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();                     
 
-                        var response = new AddQueueMessageResponse()
-                        {
-                            Response = new MessageResponse()
-                            {
-                                IsMore = false,
-                                MessageId = queueMessageProcessedMessage.Id,
-                                Sequence = 1
-                            },
-                        };
+                        var messageHubClient = GetMessageHubClientBySecurityKey(queueMessageProcessedRequest.SecurityKey, messageHubClientService);
 
-                        var messageHubClient = GetMessageHubClientBySecurityKey(queueMessageProcessedMessage.SecurityKey, messageHubClientService);
-
-                        var messageQueue = await messageQueueService.GetByIdAsync(queueMessageProcessedMessage.MessageQueueId);
+                        var messageQueue = await messageQueueService.GetByIdAsync(queueMessageProcessedRequest.MessageQueueId);
 
                         if (messageHubClient == null)
                         {
@@ -313,7 +309,7 @@ namespace CFMessageQueue.Hub
                             isHasMutex = _queueMutex.WaitOne();
 
                             // Check that they're processing this message
-                            var queueMessageMemory = _queueMessageInternalProcessing.FirstOrDefault(m => m.Id == queueMessageProcessedMessage.QueueMessageId);
+                            var queueMessageMemory = _queueMessageInternalProcessing.FirstOrDefault(m => m.Id == queueMessageProcessedRequest.QueueMessageId);
                             if (queueMessageMemory == null)     // Not processing message
                             {
                                 response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
@@ -326,15 +322,18 @@ namespace CFMessageQueue.Hub
                             }
                             else
                             {
-                                if (queueMessageProcessedMessage.Processed)
+                                if (queueMessageProcessedRequest.Processed)
                                 {
                                     // Delete queue message
-                                    await queueMessageService.DeleteByIdAsync(queueMessageProcessedMessage.QueueMessageId);
+                                    await queueMessageService.DeleteByIdAsync(queueMessageProcessedRequest.QueueMessageId);
+
+                                    // Log processed
+                                    _auditLog.LogQueueMessage(DateTimeOffset.UtcNow, "PROCESSED", _messageQueue.Name, queueMessageMemory);
                                 }
                                 else
                                 {
                                     // Reset queue message status
-                                    var queueMessage = await queueMessageService.GetByIdAsync(queueMessageProcessedMessage.QueueMessageId);
+                                    var queueMessage = await queueMessageService.GetByIdAsync(queueMessageProcessedRequest.QueueMessageId);
 
                                     queueMessage.Status = QueueMessageStatuses.Default;
                                     queueMessage.ProcessingMessageHubClientId = "";
@@ -346,15 +345,25 @@ namespace CFMessageQueue.Hub
 
                                _queueMessageInternalProcessing.Remove(queueMessageMemory);
                             }
-                        }
+                        }                        
                     }
+                }
+                catch (Exception exception)
+                {
+                    response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: {exception.Message}";
+
+                    _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing {queueMessageProcessedRequest.TypeId}: {exception.Message}");
                 }
                 finally
                 {
                     if (isHasMutex) _queueMutex.ReleaseMutex();
-                }
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {queueMessageProcessedMessage.TypeId}");
+                    // Send response
+                    _clientsConnection.SendMessage(response, messageReceivedInfo.RemoteEndpointInfo);
+
+                    _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {queueMessageProcessedRequest.TypeId} ({(response.Response.ErrorCode == null ? "Success" : response.Response.ErrorMessage)})");                    
+                }                
             });
         }
 
@@ -366,11 +375,21 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task HandleAddQueueMessageRequestAsync(AddQueueMessageRequest addQueueMessageRequest, MessageReceivedInfo messageReceivedInfo)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
+                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {addQueueMessageRequest.TypeId}");
+
                 var isHasMutex = false;
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {addQueueMessageRequest.TypeId}");
+                var response = new AddQueueMessageResponse()
+                {
+                    Response = new MessageResponse()
+                    {
+                        IsMore = false,
+                        MessageId = addQueueMessageRequest.Id,
+                        Sequence = 1
+                    },
+                };                
 
                 try
                 {
@@ -379,16 +398,6 @@ namespace CFMessageQueue.Hub
                         var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                         var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
                         var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-
-                        var response = new AddQueueMessageResponse()
-                        {
-                            Response = new MessageResponse()
-                            {
-                                IsMore = false,
-                                MessageId = addQueueMessageRequest.Id,
-                                Sequence = 1
-                            },
-                        };
                         
                         var messageHubClient = GetMessageHubClientBySecurityKey(addQueueMessageRequest.SecurityKey, messageHubClientService);
                         
@@ -447,8 +456,10 @@ namespace CFMessageQueue.Hub
                                 {
                                     Content = addQueueMessageRequest.QueueMessage.Content,
                                     ContentType = addQueueMessageRequest.QueueMessage.ContentType,
-                                    CreatedDateTime = DateTimeOffset.UtcNow,
+                                    CreatedDateTime = DateTime.UtcNow,                                    
                                     ExpirySeconds = addQueueMessageRequest.QueueMessage.ExpirySeconds,
+                                    ExpiryDateTime = addQueueMessageRequest.QueueMessage.ExpirySeconds == 0 ? 
+                                                DateTime.MaxValue : DateTime.UtcNow.AddSeconds(addQueueMessageRequest.QueueMessage.ExpirySeconds),
                                     Id = Guid.NewGuid().ToString(),
                                     MessageQueueId = addQueueMessageRequest.MessageQueueId,
                                     Name = addQueueMessageRequest.QueueMessage.Name,
@@ -459,6 +470,9 @@ namespace CFMessageQueue.Hub
                                 };
 
                                 await queueMessageService.AddAsync(queueMessage);
+
+                                // Log added
+                                _auditLog.LogQueueMessage(DateTimeOffset.UtcNow, "ADDED", _messageQueue.Name, queueMessage);
 
                                 // Set QueueMessageId for response
                                 response.QueueMessageId = queueMessage.Id;
@@ -471,18 +485,25 @@ namespace CFMessageQueue.Hub
                                             s.NotifyIfMessageAdded = false;
                                         });
                             }
-                        }
-                        
-                        // Send response
-                        _messageQueueClientsConnection.SendAddQueueMessageResponse(response, messageReceivedInfo.RemoteEndpointInfo);                        
+                        }                                           
                     }
-                }                
+                }
+                catch (Exception exception)
+                {
+                    response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: {exception.Message}";
+
+                    _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing {addQueueMessageRequest.TypeId}: {exception.Message}");
+                }
                 finally
                 {
                     if (isHasMutex) _queueMutex.ReleaseMutex();
-                }
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {addQueueMessageRequest.TypeId}");
+                    // Send response
+                    _clientsConnection.SendMessage(response, messageReceivedInfo.RemoteEndpointInfo);
+
+                    _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {addQueueMessageRequest.TypeId} ({(response.Response.ErrorCode == null ? "Success" : response.Response.ErrorMessage)})");                    
+                }                
             });
         }
 
@@ -494,11 +515,22 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task HandleGetNextQueueMessageRequestAsync(GetNextQueueMessageRequest getNextQueueMessageRequest, MessageReceivedInfo messageReceivedInfo)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {getNextQueueMessageRequest.TypeId}");
 
                 var isHasMutex = false;
+
+                var response = new GetNextQueueMessageResponse()
+                {
+                    Response = new MessageResponse()
+                    {
+                        IsMore = false,
+                        MessageId = getNextQueueMessageRequest.Id,
+                        Sequence = 1
+                    },
+                };
+
                 try
                 {                    
                     using (var scope = _serviceProvider.CreateScope())
@@ -506,17 +538,7 @@ namespace CFMessageQueue.Hub
                         var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                         var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
                         var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-
-                        var response = new GetNextQueueMessageResponse()
-                        {
-                            Response = new MessageResponse()
-                            {
-                                IsMore = false,
-                                MessageId = getNextQueueMessageRequest.Id,
-                                Sequence = 1
-                            },
-                        };
-
+                     
                         var messageHubClient = GetMessageHubClientBySecurityKey(getNextQueueMessageRequest.SecurityKey, messageHubClientService);
 
                         var messageQueue = await messageQueueService.GetByIdAsync(getNextQueueMessageRequest.MessageQueueId);
@@ -545,11 +567,11 @@ namespace CFMessageQueue.Hub
                             response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Processing Seconds must be 1 second or more";
                         }
                         else
-                        {
+                        {                            
                             // Try and get message, if no message then may need to wait for message
                             bool waitedForMessage = false;
                             QueueMessageInternal? queueMessage = null;
-                            var stopwatch = new Stopwatch();    // Started on first
+                            var stopwatch = new Stopwatch();    // Started on first failure to get a message from DB
                             while (!waitedForMessage)
                             {
                                 // Get mutex. Need to hold it for shortest time possible
@@ -558,12 +580,12 @@ namespace CFMessageQueue.Hub
                                 // Get next message. Only allowed if not exceeded max number of concurrent messages being processed                             
                                 if (messageQueue.MaxConcurrentProcessing == 0 ||
                                     _queueMessageInternalProcessing.Count < messageQueue.MaxConcurrentProcessing)
-                                {
-                                    queueMessage = await queueMessageService.GetNextAsync(messageQueue.Id);
+                                {                                    
+                                    queueMessage = await queueMessageService.GetNextAsync(messageQueue.Id);                                    
                                 }
 
                                 if (queueMessage != null)
-                                {
+                                {                                    
                                     // Update message as Processing
                                     queueMessage.Status = QueueMessageStatuses.Processing;
                                     queueMessage.ProcessingMessageHubClientId = messageHubClient.Id;
@@ -575,7 +597,7 @@ namespace CFMessageQueue.Hub
                                     // Set message as processing
                                     _queueMessageInternalProcessing.Add(queueMessage);
 
-                                    waitedForMessage = true;
+                                    waitedForMessage = true;                                    
                                 }
 
                                 // Release mutex
@@ -595,20 +617,19 @@ namespace CFMessageQueue.Hub
                                         {
                                             if (stopwatch.ElapsedMilliseconds < getNextQueueMessageRequest.MaxWaitMilliseconds)
                                             {
-                                                Thread.Sleep(200);
+                                                Thread.Sleep(250);
                                             }
                                             else     // Timeout
                                             {
-                                                waitedForMessage = true;
+                                                waitedForMessage = true;                                                
                                             }
                                         }
                                         else   // Start stopwatch for first time
-                                        {
+                                        {                                            
                                             stopwatch.Start();
                                         }
                                     }
                                 }
-
                             }
 
                             response.QueueMessage = queueMessage;
@@ -622,18 +643,25 @@ namespace CFMessageQueue.Hub
                                     s.DoNotifyMessageAdded = false;
                                 });
                             }
-                        }
-
-                        // Send response
-                        _messageQueueClientsConnection.SendGetNextQueueMessageResponse(response, messageReceivedInfo.RemoteEndpointInfo);
+                        }                        
                     }
+                }
+                catch (Exception exception)
+                {
+                    response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: {exception.Message}";
+
+                    _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing {getNextQueueMessageRequest.TypeId}: {exception.Message}");
                 }
                 finally
                 {
                     if (isHasMutex) _queueMutex.ReleaseMutex();
-                }
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getNextQueueMessageRequest.TypeId}");
+                    // Send response
+                    _clientsConnection.SendMessage(response, messageReceivedInfo.RemoteEndpointInfo);
+
+                    _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getNextQueueMessageRequest.TypeId} ({(response.Response.ErrorCode == null ? "Success" : response.Response.ErrorMessage)})");                    
+                }
             });
         }
 
@@ -646,9 +674,19 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task HandleGetQueueMessagesRequestAsync(GetQueueMessagesRequest getQueueMessagesRequest, MessageReceivedInfo messageReceivedInfo)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {getQueueMessagesRequest.TypeId}");
+
+                var response = new GetQueueMessagesResponse()
+                {
+                    Response = new MessageResponse()
+                    {
+                        IsMore = false,
+                        MessageId = getQueueMessagesRequest.Id,
+                        Sequence = 1
+                    },
+                };
 
                 var isHasMutex = false;
                 try
@@ -658,16 +696,6 @@ namespace CFMessageQueue.Hub
                         var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
                         var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
                         var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-
-                        var response = new GetQueueMessagesResponse()
-                        {
-                            Response = new MessageResponse()
-                            {
-                                IsMore = false,
-                                MessageId = getQueueMessagesRequest.Id,
-                                Sequence = 1
-                            },
-                        };
 
                         var messageHubClient = GetMessageHubClientBySecurityKey(getQueueMessagesRequest.SecurityKey, messageHubClientService);
 
@@ -711,17 +739,24 @@ namespace CFMessageQueue.Hub
                                                 .Take(getQueueMessagesRequest.PageItems)
                                                 .ToList();
                         }
-
-                        // Send response
-                        _messageQueueClientsConnection.SendGetQueueMessagesResponse(response, messageReceivedInfo.RemoteEndpointInfo);
                     }
+                }
+                catch (Exception exception)
+                {
+                    response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: {exception.Message}";
+
+                    _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing {getQueueMessagesRequest.TypeId}: {exception.Message}");
                 }
                 finally
                 {
                     if (isHasMutex) _queueMutex.ReleaseMutex();
-                }
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getQueueMessagesRequest.TypeId}");
+                    // Send response
+                    _clientsConnection.SendMessage(response, messageReceivedInfo.RemoteEndpointInfo);
+
+                    _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {getQueueMessagesRequest.TypeId} ({(response.Response.ErrorCode == null ? "Success" : response.Response.ErrorMessage)})");                    
+                }                
             });
         }
 
@@ -733,107 +768,119 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task HandleMessageQueueSubscribeRequestAsync(MessageQueueSubscribeRequest messageQueueSubscribeRequest, MessageReceivedInfo messageReceivedInfo)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 _log.Log(DateTimeOffset.UtcNow, "Information", $"Processing {messageQueueSubscribeRequest.TypeId}");
 
-                using (var scope = _serviceProvider.CreateScope())
+                // Create response
+                var response = new MessageQueueSubscribeResponse()
                 {
-                    var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
-                    var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
-                    var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
-                    //var messageQueueSubscriptionService = scope.ServiceProvider.GetRequiredService<IMessageQueueSubscriptionService>();
-                  
-                    // Create response
-                    var response = new MessageQueueSubscribeResponse()
+                    Response = new MessageResponse()
                     {
-                        Response = new MessageResponse()
+                        IsMore = false,
+                        MessageId = messageQueueSubscribeRequest.Id,
+                        Sequence = 1
+                    },
+                    SubscribeId = ""
+                };
+
+                try
+                {
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var messageHubClientService = scope.ServiceProvider.GetRequiredService<IMessageHubClientService>();
+                        var messageQueueService = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+                        var queueMessageService = scope.ServiceProvider.GetRequiredService<IQueueMessageInternalService>();
+                        //var messageQueueSubscriptionService = scope.ServiceProvider.GetRequiredService<IMessageQueueSubscriptionService>();
+
+                        var messageHubClient = GetMessageHubClientBySecurityKey(messageQueueSubscribeRequest.SecurityKey, messageHubClientService);
+
+                        var messageQueue = await messageQueueService.GetByIdAsync(messageQueueSubscribeRequest.MessageQueueId);
+
+                        var securityItem = (messageQueue == null || messageHubClient == null) ?
+                                         null : messageQueue.SecurityItems.FirstOrDefault(si => si.MessageHubClientId == messageHubClient.Id);
+
+                        if (messageHubClient == null)
                         {
-                            IsMore = false,
-                            MessageId = messageQueueSubscribeRequest.Id,
-                            Sequence = 1
-                        },
-                        SubscribeId = ""
-                    };
-
-                    var messageHubClient = GetMessageHubClientBySecurityKey(messageQueueSubscribeRequest.SecurityKey, messageHubClientService);
-
-                    var messageQueue = await messageQueueService.GetByIdAsync(messageQueueSubscribeRequest.MessageQueueId);
-
-                    var securityItem = (messageQueue == null || messageHubClient == null) ?
-                                     null : messageQueue.SecurityItems.FirstOrDefault(si => si.MessageHubClientId == messageHubClient.Id);
-
-                    if (messageHubClient == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
-                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
-                    }
-                    else if (messageQueue == null)
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
-                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
-                    }
-                    else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueSubscribeQueue))
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
-                        response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
-                    }
-                    else if (messageQueueSubscribeRequest.QueueSizeFrequencySecs > 0 &&
-                            messageQueueSubscribeRequest.QueueSizeFrequencySecs < 10)       // Limit smallest duration
-                    {
-                        response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
-                        response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Queue Frequency Size Seconds must be 10 seconds or more ";
-                    }
-                    else
-                    {
-                        // Check for existing subscription                        
-                        var clientQueueSubscription = _clientQueueSubscriptions.FirstOrDefault(s => s.Id == messageQueueSubscribeRequest.ClientSessionId);
-
-                        // Handle subscribe or unsubscribe
-                        switch (messageQueueSubscribeRequest.ActionName)
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (messageQueue == null)
                         {
-                            case "SUBSCRIBE":
-                                if (clientQueueSubscription == null)   // New subscription
-                                {
-                                    clientQueueSubscription = new ClientQueueSubscription()
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Message Queue is invalid";
+                        }
+                        else if (securityItem == null || !securityItem.RoleTypes.Contains(RoleTypes.QueueSubscribeQueue))
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.PermissionDenied;
+                            response.Response.ErrorMessage = EnumUtilities.GetEnumDescription(response.Response.ErrorCode);
+                        }
+                        else if (messageQueueSubscribeRequest.QueueSizeFrequencySecs > 0 &&
+                                messageQueueSubscribeRequest.QueueSizeFrequencySecs < 10)       // Limit smallest duration
+                        {
+                            response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                            response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Queue Frequency Size Seconds must be 10 seconds or more ";
+                        }
+                        else
+                        {
+                            // Check for existing subscription                        
+                            var clientQueueSubscription = _clientQueueSubscriptions.FirstOrDefault(s => s.Id == messageQueueSubscribeRequest.ClientSessionId);
+
+                            // Handle subscribe or unsubscribe
+                            switch (messageQueueSubscribeRequest.ActionName)
+                            {
+                                case "SUBSCRIBE":
+                                    if (clientQueueSubscription == null)   // New subscription
                                     {
-                                        Id = Guid.NewGuid().ToString(),
-                                        ClientSessionId = messageQueueSubscribeRequest.ClientSessionId,
-                                        MessageHubClientId = messageHubClient.Id,
-                                        RemoteEndpointInfo = messageReceivedInfo.RemoteEndpointInfo,
-                                        QueueSizeFrequencySecs = messageQueueSubscribeRequest.QueueSizeFrequencySecs
-                                    };
-                                    _clientQueueSubscriptions.Add(clientQueueSubscription);
-                                }
-                                else    // Update subscription
-                                {
-                                    clientQueueSubscription.ClientSessionId = messageQueueSubscribeRequest.ClientSessionId;
-                                    clientQueueSubscription.RemoteEndpointInfo = messageReceivedInfo.RemoteEndpointInfo;
-                                    clientQueueSubscription.QueueSizeFrequencySecs = messageQueueSubscribeRequest.QueueSizeFrequencySecs;
-                                }
-                     
-                                response.SubscribeId = clientQueueSubscription.Id;                                
-                                break;
+                                        clientQueueSubscription = new ClientQueueSubscription()
+                                        {
+                                            Id = Guid.NewGuid().ToString(),
+                                            ClientSessionId = messageQueueSubscribeRequest.ClientSessionId,
+                                            MessageHubClientId = messageHubClient.Id,
+                                            RemoteEndpointInfo = messageReceivedInfo.RemoteEndpointInfo,
+                                            QueueSizeFrequencySecs = messageQueueSubscribeRequest.QueueSizeFrequencySecs
+                                        };
+                                        _clientQueueSubscriptions.Add(clientQueueSubscription);
+                                    }
+                                    else    // Update subscription
+                                    {
+                                        clientQueueSubscription.ClientSessionId = messageQueueSubscribeRequest.ClientSessionId;
+                                        clientQueueSubscription.RemoteEndpointInfo = messageReceivedInfo.RemoteEndpointInfo;
+                                        clientQueueSubscription.QueueSizeFrequencySecs = messageQueueSubscribeRequest.QueueSizeFrequencySecs;
+                                    }
 
-                            case "UNSUBSCRIBE":
-                                if (clientQueueSubscription != null)
-                                {
-                                    _clientQueueSubscriptions.Remove(clientQueueSubscription);
-                                }                                
-                                break;
+                                    response.SubscribeId = clientQueueSubscription.Id;
+                                    break;
 
-                            default:
-                                response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
-                                response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Action Name {messageQueueSubscribeRequest.ActionName} is invalid";
-                                break;
+                                case "UNSUBSCRIBE":
+                                    if (clientQueueSubscription != null)
+                                    {
+                                        _clientQueueSubscriptions.Remove(clientQueueSubscription);
+                                    }
+                                    break;
+
+                                default:
+                                    response.Response.ErrorCode = ResponseErrorCodes.InvalidParameters;
+                                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: Action Name {messageQueueSubscribeRequest.ActionName} is invalid";
+                                    break;
+                            }
                         }
                     }
-
-                    // Send response
-                    _messageQueueClientsConnection.SendMessageQueueSubscribeResponse(response, messageReceivedInfo.RemoteEndpointInfo);
                 }
+                catch (Exception exception)
+                {
+                    response.Response.ErrorCode = ResponseErrorCodes.Unknown;
+                    response.Response.ErrorMessage = $"{EnumUtilities.GetEnumDescription(response.Response.ErrorCode)}: {exception.Message}";
 
-                _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {messageQueueSubscribeRequest.TypeId}");
+                    _log.Log(DateTimeOffset.UtcNow, "Error", $"Error processing {messageQueueSubscribeRequest.TypeId}: {exception.Message}");
+                }
+                finally
+                {
+                    // Send response
+                    _clientsConnection.SendMessage(response, messageReceivedInfo.RemoteEndpointInfo);
+
+                    _log.Log(DateTimeOffset.UtcNow, "Information", $"Processed {messageQueueSubscribeRequest.TypeId} ({(response.Response.ErrorCode == null ? "Success" : response.Response.ErrorMessage)})");                    
+                }                
             });
         }
 
@@ -845,7 +892,7 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task ExpiredProcessingMessagesAsync(string messageQueueId)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 var isHasMutex = false;
                 try
@@ -900,7 +947,7 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task ExpireOldQueueMessagesAsync(string messageQueueId)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {                
                 var isHasMutex = false;
                 try
@@ -978,7 +1025,7 @@ namespace CFMessageQueue.Hub
 
         private Task LogStatisticsTaskAsync(string messageQueueId)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 using (var scope = _serviceProvider.CreateScope())
                 {
@@ -999,7 +1046,7 @@ namespace CFMessageQueue.Hub
         /// <returns></returns>
         private Task NotifySubscriptionsAsync()
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 using (var scope = _serviceProvider.CreateScope())
                 {
@@ -1013,7 +1060,7 @@ namespace CFMessageQueue.Hub
                             EventName = MessageQueueEventNames.MessageAdded
                         };
 
-                        _messageQueueClientsConnection.SendMessageQueueNotificationMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
+                        _clientsConnection.SendMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
 
                         // Reset flag
                         clientQueueSubscription.DoNotifyMessageAdded = false;
@@ -1027,7 +1074,7 @@ namespace CFMessageQueue.Hub
                             EventName = MessageQueueEventNames.QueueCleared
                         };
 
-                        _messageQueueClientsConnection.SendMessageQueueNotificationMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
+                        _clientsConnection.SendMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
 
                         // Reset flag
                         clientQueueSubscription.DoNotifyQueueCleared = false;
@@ -1048,7 +1095,7 @@ namespace CFMessageQueue.Hub
                             QueueSize = queueSize
                         };
 
-                        _messageQueueClientsConnection.SendMessageQueueNotificationMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
+                        _clientsConnection.SendMessage(messageQueueNotification, clientQueueSubscription.RemoteEndpointInfo);
 
                         // Reset flag
                         clientQueueSubscription.LastNotifyQueueSize = DateTimeOffset.UtcNow;

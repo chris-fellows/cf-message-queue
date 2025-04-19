@@ -1,5 +1,6 @@
 ﻿using CFConnectionMessaging.Models;
 using CFMessageQueue.Hub.Enums;
+using CFMessageQueue.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace CFMessageQueue.Hub.Models
     {
         public QueueItemTypes ItemType { get; set; }
 
-        public ConnectionMessage? ConnectionMessage { get; set; }
+        public MessageBase? Message { get; set; }
 
         public MessageReceivedInfo? MessageReceivedInfo { get; set; }
     }

@@ -33,7 +33,7 @@ namespace CFMessageQueue.Constants
         public const string GetMessageQueuesResponse = "GetMessageQueuesResponse";
 
         public const string GetQueueMessagesRequest = "GetQueueMessagesRequest";
-        public const string GetQueueMessagesResponse = "GetQueueMessagesRequest";
+        public const string GetQueueMessagesResponse = "GetQueueMessagesResponse";
 
         public const string GetNextQueueMessageRequest = "GetNextQueueMessageRequest";
         public const string GetNextQueueMessageResponse = "GetNextQueueMessageResponse";
@@ -43,6 +43,7 @@ namespace CFMessageQueue.Constants
         public const string MessageQueueSubscribeRequest = "MessageQueueSubscribeRequest";
         public const string MessageQueueSubscribeResponse = "MessageQueueSubscribeResponse";
 
-        public const string QueueMessageProcessedMessage = "QueueMessageProcessedMessage";
+        public const string QueueMessageProcessedRequest = "QueueMessageProcessedRequest";
+        public const string QueueMessageProcessedResponse = "QueueMessageProcessedResponse";
     }
 }

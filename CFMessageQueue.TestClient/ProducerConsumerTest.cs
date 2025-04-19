@@ -1,4 +1,4 @@
-﻿using CFMessageQueue.Enums;
+using CFMessageQueue.Enums;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Services;
 using CFMessageQueue.TestClient.Models;
@@ -63,19 +63,19 @@ namespace CFMessageQueue.TestClient
             };
 
             var consumers = new List<Consumer>();
-            var producers =new List<Producer>();
+            var producers = new List<Producer>();
 
             // Configure system
             Configure(consumerConfigs, producerConfigs);
 
-            //// Start consumers
-            //Console.WriteLine($"Starting {consumerConfigs.Count} consumers");
-            //foreach (var consumerConfig in consumerConfigs)
-            //{
-            //    var consumer = new Consumer();
-            //    consumers.Add(consumer);
-            //    consumer.Start(consumerConfig, "Consumer" + (consumerConfigs.IndexOf(consumerConfig) + 1).ToString());
-            //}
+            // Start consumers
+            Console.WriteLine($"Starting {consumerConfigs.Count} consumers");
+            foreach (var consumerConfig in consumerConfigs)
+            {
+                var consumer = new Consumer();
+                consumers.Add(consumer);
+                consumer.Start(consumerConfig, "Consumer" + (consumerConfigs.IndexOf(consumerConfig) + 1).ToString());
+            }
 
             // Start producers
             Console.WriteLine($"Starting {producerConfigs.Count} producers");
@@ -104,13 +104,13 @@ namespace CFMessageQueue.TestClient
 
         private void Configure(List<ConsumerConfig> consumerConfigs, List<ProducerConfig> producerConfigs)
         {
-            Console.WriteLine("Configuring for producers and consumers");       
+            Console.WriteLine("Configuring for producers and consumers");
 
             // Default role types for queue functions
             var defaultQueueRoleTypes = RoleTypeUtilities.DefaultNonAdminQueueClientRoleTypes;
 
             // Default role types for hub functions
-            var defaultHubRoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes;            
+            var defaultHubRoleTypes = RoleTypeUtilities.DefaultNonAdminHubClientRoleTypes;
 
             var messageHubClientConnectorAdmin = new MessageHubClientConnector(producerConfigs[0].HubEndpointInfo,
                                      producerConfigs[0].AdminSecurityKey,
@@ -147,7 +147,7 @@ namespace CFMessageQueue.TestClient
             }
 
             Console.WriteLine("Configured for producers and consumers");
-        }        
+        }
 
         /// <summary>
         /// Creates message hub client and sets hub and queue level permissions

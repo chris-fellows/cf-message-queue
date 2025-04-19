@@ -2,7 +2,7 @@
 
 namespace CFMessageQueue.Models
 {
-    public class QueueMessageProcessedMessage : MessageBase
+    public class QueueMessageProcessedRequest : MessageBase
     {
         /// <summary>
         /// Message queue
@@ -20,10 +20,10 @@ namespace CFMessageQueue.Models
         public bool Processed { get; set; }
 
 
-        public QueueMessageProcessedMessage()
+        public QueueMessageProcessedRequest()
         {
             Id = Guid.NewGuid().ToString();
-            TypeId = MessageTypeIds.QueueMessageProcessedMessage;
+            TypeId = MessageTypeIds.QueueMessageProcessedRequest;
         }
     }
 }

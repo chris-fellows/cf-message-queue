@@ -3,30 +3,52 @@ using CFMessageQueue.Enums;
 using CFMessageQueue.Exceptions;
 using CFMessageQueue.Interfaces;
 using CFMessageQueue.Models;
+using CFMessageQueue.Utilities;
+using System.Threading.Channels;
 
 namespace CFMessageQueue.Services
 {
     /// <summary>
     /// Message hub client connector. Communicates with hub worker.
     /// </summary>
-    public class MessageHubClientConnector : IMessageHubClientConnector, IDisposable
+    public class MessageHubClientConnector : ClientConnectorBase, IMessageHubClientConnector, IDisposable
     {
         private readonly MessageHubConnection _messageHubConnection = new MessageHubConnection();
 
         private readonly string _clientSessionId = Guid.NewGuid().ToString();
         private readonly EndpointInfo _remoteEndpointInfo;
         private readonly string _securityKey;        
-
+      
         public MessageHubClientConnector(EndpointInfo remoteEndpointInfo, string securityKey, int localPort)
         {            
             _remoteEndpointInfo = remoteEndpointInfo;
             _securityKey = securityKey;
+
+            // Set event handler to accumulate messages received
+            _messageHubConnection.OnMessageReceived += delegate (MessageBase messageBase, MessageReceivedInfo messageReceivedInfo)
+            {
+                // If response then forward to relevant session
+                if (messageBase.Response != null &&
+                    _responseSessions.ContainsKey(messageBase.Response.MessageId))
+                {
+                    _responseSessions[messageBase.Response.MessageId].MessagesChannel.Writer.WriteAsync(new Tuple<MessageBase, MessageReceivedInfo>(messageBase, messageReceivedInfo));
+                }
+            };
 
             _messageHubConnection.StartListening(localPort);
         }
 
         public void Dispose()
         {
+            // Cancel any active requests/responses
+            foreach(var session in _responseSessions.Values)
+            {
+                if (!session.CancellationTokenSource.IsCancellationRequested)
+                {
+                    session.CancellationTokenSource.Cancel();
+                }
+            }
+
             _messageHubConnection.Dispose();
         }
 
@@ -35,36 +57,58 @@ namespace CFMessageQueue.Services
             return Guid.NewGuid().ToString();
         }
 
-        public Task ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes)
+        public async Task<bool> ConfigureMessageHubClientAsync(string messageHubClientId, List<RoleTypes> roleTypes)
         {            
             if (String.IsNullOrEmpty(messageHubClientId))
             {
                 throw new ArgumentNullException(nameof(messageHubClientId));
-            }
+            }           
 
-            var configureMessageHubClientRequest = new ConfigureMessageHubClientRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageHubClientId = messageHubClientId,
-                MessageQueueId = "",
-                RoleTypes = roleTypes     // Will return error if they specify non-hub roles
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new ConfigureMessageHubClientRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageHubClientId = messageHubClientId,
+                        MessageQueueId = "",
+                        RoleTypes = roleTypes     // Will return error if they specify non-hub roles
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendConfigureMessageHubClientRequest(configureMessageHubClientRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error configuring message hub client", messageConnectionException);
-            }
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id,new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-            return Task.CompletedTask;
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error configuring message hub client", messageConnectionException);
+                    }
+                }
+
+                return true;
+            });
         }
 
-        public Task ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
+        public async Task<bool> ConfigureMessageHubClientAsync(string messageHubClientId, string messageQueueId, List<RoleTypes> roleTypes)
         {
             if (String.IsNullOrEmpty(messageHubClientId))
             {
@@ -75,29 +119,51 @@ namespace CFMessageQueue.Services
                 throw new ArgumentNullException(nameof(messageQueueId));
             }
 
-            var configureMessageHubClientRequest = new ConfigureMessageHubClientRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageHubClientId = messageHubClientId,
-                MessageQueueId = messageQueueId,
-                RoleTypes = roleTypes       // Will return error if they specify non-queue roles
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new ConfigureMessageHubClientRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageHubClientId = messageHubClientId,
+                        MessageQueueId = messageQueueId,
+                        RoleTypes = roleTypes       // Will return error if they specify non-queue roles
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendConfigureMessageHubClientRequest(configureMessageHubClientRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);                
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error configuring message hub client", messageConnectionException);
-            }
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-            return Task.CompletedTask;
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error configuring message hub client", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });            
         }
 
-        public Task<string> AddMessageQueueAsync(string name, int maxConcurrentProcessing, int maxSize)
+        public async Task<string> AddMessageQueueAsync(string name, int maxConcurrentProcessing, int maxSize)
         {
             if (String.IsNullOrEmpty(name))
             {
@@ -112,85 +178,154 @@ namespace CFMessageQueue.Services
                 throw new ArgumentOutOfRangeException(nameof(maxSize), "Max Size must be zero or more");
             }
 
-            var addMessageQueueRequest = new AddMessageQueueRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueName = name,
-                MaxConcurrentProcessing = maxConcurrentProcessing,
-                MaxSize = maxSize
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new AddMessageQueueRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueName = name,
+                        MaxConcurrentProcessing = maxConcurrentProcessing,
+                        MaxSize = maxSize
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendAddMessageQueueRequest(addMessageQueueRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                return Task.FromResult(response.MessageQueueId);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error adding message queue", messageConnectionException);
-            }
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        // Return response
+                        var response = (AddMessageQueueResponse)responseMessages.First();
+                        return response.MessageQueueId;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error adding message queue", messageConnectionException);
+                    }
+                }
+            });
         }
 
-        public Task DeleteMessageQueueAsync(string messageQueueId)
+        public async Task<bool> DeleteMessageQueueAsync(string messageQueueId)
         {
             if (String.IsNullOrEmpty(messageQueueId))
             {
                 throw new ArgumentNullException(nameof(messageQueueId));
             }
 
-            var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = messageQueueId,
-                ActionName = "DELETE"
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new ExecuteMessageQueueActionRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = messageQueueId,
+                        ActionName = "DELETE"
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendExecuteMessageQueueActionRequest(executeMessageQueueActionRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);                
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error deleting message queue", messageConnectionException);
-            }
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-            return Task.CompletedTask;
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error deleting message queue", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });
         }
 
-        public Task ClearMessageQueueAsync(string messageQueueId)
+        public async Task<bool> ClearMessageQueueAsync(string messageQueueId)
         {
             if (String.IsNullOrEmpty(messageQueueId))
             {
                 throw new ArgumentNullException(nameof(messageQueueId));
             }
 
-            var executeMessageQueueActionRequest = new ExecuteMessageQueueActionRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                MessageQueueId = messageQueueId,
-                ActionName = "CLEAR"
-            };
+                using (var disposableSession = new DisposableSession())
+                {
 
-            try
-            {
-                var response = _messageHubConnection.SendExecuteMessageQueueActionRequest(executeMessageQueueActionRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);                
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error deleting message queue", messageConnectionException);
-            }
+                    var request = new ExecuteMessageQueueActionRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        MessageQueueId = messageQueueId,
+                        ActionName = "CLEAR"
+                    };
 
-            return Task.CompletedTask;
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
+
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                       
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error clearing message queue", messageConnectionException);
+                    }
+
+                    return true;
+                }
+            });
         }
 
-        public Task<string> AddMessageHubClientAsync(string name, string securityKey)
+        public async Task<string> AddMessageHubClientAsync(string name, string securityKey)
         {
             if (String.IsNullOrEmpty(name))
             {
@@ -201,101 +336,181 @@ namespace CFMessageQueue.Services
                 throw new ArgumentNullException(nameof(securityKey));
             }
 
-            var addMessageHubClientRequest = new AddMessageHubClientRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-                Name = name,
-                ClientSecurityKey = securityKey
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new AddMessageHubClientRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                        Name = name,
+                        ClientSecurityKey = securityKey
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendAddMessageHubClientRequest(addMessageHubClientRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id,new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                return Task.FromResult(response.MessageHubClientId);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting message hubs", messageConnectionException);
-            }
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (AddMessageHubClientResponse)responseMessages.First();
+                        return response.MessageHubClientId;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting message hubs", messageConnectionException);
+                    }
+                }
+            });
         }
 
-        public Task<List<MessageHubClient>> GetMessageHubClientsAsync()
+        public async Task<List<MessageHubClient>> GetMessageHubClientsAsync()
         {
-            var getMessageHubClientsRequest = new GetMessageHubClientsRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new GetMessageHubClientsRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendGetMessageHubClientsRequest(getMessageHubClientsRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                return Task.FromResult(response.MessageHubClients);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting message hub clients", messageConnectionException);
-            }
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
+
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (GetMessageHubClientsResponse)responseMessages.First();
+
+                        return response.MessageHubClients;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting message hub clients", messageConnectionException);
+                    }
+                }
+            });
         }
 
-        public Task<List<QueueMessageHub>> GetMessageHubsAsync()
+        public async Task<List<QueueMessageHub>> GetMessageHubsAsync()
         {
-            var getMessageHubsRequest = new GetMessageHubsRequest()
+            return await Task.Run(async () =>
             {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-            };
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new GetMessageHubsRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                    };
 
-            try
-            {
-                var response = _messageHubConnection.SendGetMessageHubsRequest(getMessageHubsRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-                return Task.FromResult(response.MessageHubs);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting message hubs", messageConnectionException);
-            }
-        }
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
 
-        /// <summary>
-        /// Checks connection message response and throws an exception if an error
-        /// </summary>
-        /// <param name="message"></param>
-        /// <exception cref="MessageConnectionException"></exception>
-        private void ThrowResponseExceptionIfRequired(MessageBase message)
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (GetMessageHubsResponse)responseMessages.First();
+                        return response.MessageHubs;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting message hubs", messageConnectionException);
+                    }
+                }
+            });
+        }    
+
+        public async Task<List<MessageQueue>> GetMessageQueuesAsync()
         {
-            if (message.Response != null && message.Response.ErrorCode != null)
+            return await Task.Run(async () =>
             {
-                throw new MessageConnectionException(message.Response.ErrorMessage);
-            }
-        }
+                using (var disposableSession = new DisposableSession())
+                {
+                    var request = new GetMessageQueuesRequest()
+                    {
+                        SecurityKey = _securityKey,
+                        ClientSessionId = _clientSessionId,
+                    };                    
 
-        public Task<List<MessageQueue>> GetMessageQueuesAsync()
-        {
-            var getMessageQueuesRequest = new GetMessageQueuesRequest()
-            {
-                SecurityKey = _securityKey,
-                ClientSessionId = _clientSessionId,
-            };
+                    try
+                    {
+                        var responsesSession = new MessageReceiveSession(request.Id, new CancellationTokenSource());
+                        _responseSessions.Add(responsesSession.MessageId, responsesSession);
+                        disposableSession.Add(() =>
+                        {
+                            lock (_responseSessions)
+                            {
+                                if (_responseSessions.ContainsKey(responsesSession.MessageId)) _responseSessions.Remove(responsesSession.MessageId);
+                            }
+                        });
 
-            try
-            {
-                var response = _messageHubConnection.SendGetMessageQueuesRequest(getMessageQueuesRequest, _remoteEndpointInfo);
-                ThrowResponseExceptionIfRequired(response);
+                        _messageHubConnection.SendMessage(request, _remoteEndpointInfo);
 
-                return Task.FromResult(response.MessageQueues);
-            }
-            catch (MessageConnectionException messageConnectionException)
-            {
-                throw new MessageQueueException("Error getting message queues", messageConnectionException);
-            }
-        }
+                        // Wait for response                        
+                        responsesSession.CancellationTokenSource.CancelAfter(_responseTimeout);
+                        var responseMessages = await WaitForResponsesAsync(request, responsesSession);
+
+                        // Check response
+                        ThrowResponseExceptionIfRequired(responseMessages.FirstOrDefault());
+
+                        var response = (GetMessageQueuesResponse)responseMessages.First();
+                        return response.MessageQueues;
+                    }
+                    catch (MessageConnectionException messageConnectionException)
+                    {
+                        throw new MessageQueueException("Error getting message queues", messageConnectionException);
+                    }
+                }
+            });
+        }      
     }
 }
