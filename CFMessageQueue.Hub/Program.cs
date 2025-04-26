@@ -10,6 +10,7 @@ using CFMessageQueue.Utilities;
 using CFMessageQueue.Logging;
 using CFMessageQueue.Data;
 using Microsoft.EntityFrameworkCore;
+using CFMessageQueue.Common.Interfaces;
 
 internal static class Program
 {
@@ -209,6 +210,8 @@ internal static class Program
               .AddScoped<IMessageQueueService, EFMessageQueueService>()
               .AddScoped<IQueueMessageHubService, EFQueueMessageHubService>()
               .AddScoped<IQueueMessageInternalService, EFQueueMessageInternalService>()
+
+              .RegisterAllTypes<IMessageProcessor>(new[] { typeof(Program).Assembly })
 
               /*
               .AddScoped<IMessageHubClientService>((scope) =>

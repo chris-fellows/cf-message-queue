@@ -65,7 +65,7 @@ namespace CFMessageQueue.Services
                             var notification = (MessageQueueNotificationMessage)messageBase;
 
                             // Notify
-                            Task.Factory.StartNew(() => _notificationAction(notification.EventName, notification.QueueSize));                            
+                            Task.Run(() => _notificationAction(notification.EventName, notification.QueueSize));                            
                         }                        
                     };
 

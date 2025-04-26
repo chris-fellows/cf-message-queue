@@ -24,7 +24,7 @@ namespace CFMessageQueue.TestClient
                                         TimeSpan queueSizeNotificationFrequency,
                                         CancellationToken cancellationToken)
         {
-            return Task.Factory.StartNew(async () =>
+            return Task.Run(async () =>
             {
                 using (var messageQueueClientConnector = new MessageQueueClientConnector(securityKey, localPort))
                 {

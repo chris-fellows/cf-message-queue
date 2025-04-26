@@ -29,7 +29,7 @@ namespace CFMessageQueue.CLI.CommandExecutors
 
         public Task<CommandResult> ExecuteAsync(Command command)
         {
-            return Task.Factory.StartNew(() =>
+            return Task.Run(() =>
             {
                 var queueName = command.Switches.First(s => s.Name.Equals("-name", StringComparison.InvariantCultureIgnoreCase)).Value;
 

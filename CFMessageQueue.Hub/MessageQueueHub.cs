@@ -90,7 +90,7 @@ namespace CFMessageQueue.Hub
             var messageQueueWorkers = new List<MessageQueueWorker>();
             foreach (var messageQueue in messageQueues)
             {
-                messageQueueWorkers.Add(new MessageQueueWorker(messageQueue, _serviceProvider));
+                messageQueueWorkers.Add(new MessageQueueWorker(messageQueue, _serviceProvider, _systemConfig));
             }
 
             return messageQueueWorkers;

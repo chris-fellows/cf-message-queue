@@ -35,7 +35,7 @@ namespace CFMessageQueue.CLI.CommandExecutors
 
         public Task<CommandResult> ExecuteAsync(Command command)
         {
-            return Task.Factory.StartNew(() =>
+            return Task.Run(() =>
             {
                 return new CommandResult() { Exit = true };   
             });
